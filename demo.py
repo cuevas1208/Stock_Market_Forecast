@@ -31,21 +31,26 @@ def read_file(filename):
         return reader
 
 def get_data(filename):
-        
+        '''
         #df = pd.read_csv(filename)
         #dates = df.index.values
         #price = df['price'].values     
         with open(filename, 'r') as csvfile:
+            print ("here 1")
             csvFileReader = csv.reader(csvfile)
+            print ("here 2")
             next(csvFileReader)	# skipping column names
+            print ("here 3")
             for i, row in enumerate(csvFileReader):
+                print ("here 3 ", i)
                 dates.append(int(row[0].split('-')[0]))
                 prices.append(float(row[1]))
                 if (i > 29):
                     break
         print (dates)
         print (prices)
-        ''' Using unicodecsv
+        
+        '''# Using unicodecsv
         stock_File = read_file(filename)
         # Clean up the data types in the enrollments table
         stock_File0 = stock_File
@@ -59,7 +64,7 @@ def get_data(filename):
             dates.append(int(stock['Volume']))
 
         print (stock_File0[0])
-        '''
+        
         return
         
 def predict_price(dates, prices, x):
@@ -86,10 +91,10 @@ def predict_price(dates, prices, x):
 
 	return svr_rbf.predict(x)[0], svr_lin.predict(x)[0], svr_poly.predict(x)[0]
 
-stock_File0 = get_data('aapl.csv') # calling get_data method by passing the csv file to it
+stock_File0 = get_data('aapl_google.csv') # calling get_data method by passing the csv file to it
 
-predicted_price = predict_price(dates, prices, 23575094)
-print (predicted_price)
+#predicted_price = predict_price(dates, prices, 23575094)
+#print (predicted_price)
 
 
 
