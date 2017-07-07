@@ -1,22 +1,26 @@
 import matplotlib.dates as mdates
 from pandas_datareader import data
 import pandas as pd
+import numpy as np
 
+##################################################################################
 #Dowloads data and save it as CSV
+##################################################################################
+def getWebData(): 
+    # Define which online source one should use
+    data_source = 'google'
+
+    # We would like all available data from 01/01/2000 until 12/31/2016.
+    start_date = '2010-01-01'
+    end_date = '2016-12-31'
+
+    # User pandas_reader.data.DataReader to load the desired data. As simple as that.
+    panel_data = data.DataReader('TSLA', data_source, start_date, end_date)
+
+    print(panel_data.head())
+    panel_data.to_csv('stock.csv')
+
 '''
-# Define which online source one should use
-data_source = 'google'
-
-# We would like all available data from 01/01/2000 until 12/31/2016.
-start_date = '2010-01-01'
-end_date = '2016-12-31'
-
-# User pandas_reader.data.DataReader to load the desired data. As simple as that.
-panel_data = data.DataReader('TSLA', data_source, start_date, end_date)
-
-panel_data.to_csv('stock.csv')
-
-
 #################################################################################
 def parse_date(date):
     if date == '':
@@ -51,20 +55,54 @@ def get_data(filename):
 
 get_data("stock.csv")
 ##################################################################################
-
 '''
-df = pd.read_csv('stock.csv', parse_dates = True, index_col=0)
-df['100ma'] = df['Close'].rolling(window=100).mean()
 
-#eleminates NA data
-df.dropna(inplace=True)
+###################################################################################
+## reads CSV file into dataFrame
+###################################################################################
+def readCSV():
+    df = pd.read_csv('stock.csv', parse_dates = True, index_col=0)
+    df['100ma'] = df['Close'].rolling(window=100).mean()
 
-print(df.head())
+    #eleminates NA data
+    df.dropna(inplace=True)
+    print(type(df.head()))
+    print(df.head())
 
-#video p.4
-df_ohlc = df['Close'].resample('10D').ohlc()
+    #video p.4
+    df_ohlc = df['Close'].resample('10D').ohlc()
 
-df_ohlc.reset_index(inplace=True)
-df_ohlc['Date'] = df_ohlc['Date'].map(mdates.date2num)
+    df_ohlc.reset_index(inplace=True)
+    df_ohlc['Date'] = df_ohlc['Date'].map(mdates.date2num)
+    print(df_ohlc.head())
+    return(df_ohlc)
 
-print(df_ohlc.head())
+###################################################################################
+## convert data into a (32,32,1)
+###################################################################################
+def createDataSet(df_ohlc):
+    #creates fist array
+    x = np.array([df_ohlc['high'][1]  - df_ohlc['open'][1],
+                  df_ohlc['low'][1]   - df_ohlc['open'][1],
+                  df_ohlc['close'][1] - df_ohlc['open'][1],
+                  df_ohlc['close'][1] - df_ohlc['open'][1]])
+    print(x.shape)
+
+
+    #append to the first array till there is 1024 data
+    for i in range(int(1024/4)-1):
+        x = np.append(x, [df_ohlc['high'][1] - df_ohlc['open'][1],
+                          df_ohlc['low'][1] - df_ohlc['open'][1],
+                          df_ohlc['close'][1] - df_ohlc['open'][1],
+                          df_ohlc['close'][1] - df_ohlc['open'][1]])
+    print(x.shape)
+
+    x = x.reshape((32, 32, 1))
+    print(x.shape)
+
+###################################################################################
+## main
+###################################################################################
+df_ohlc = readCSV()
+createDataSet(df_ohlc)
+
