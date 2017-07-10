@@ -189,15 +189,15 @@ def combineCSV(CSVfiles, stocksName):
 ## input: stock
 ## return np.array
 ###################################################################################
-def getStockArray(stock, sN, i):
-    x = np.array([persentage(stock[sN+'_High'][i] ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Low'][i]  ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Close'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_100ma'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_200ma'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_50ma'][i] ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_10ma'][i] ,stock[sN+'_Open'][i]),
-                  stock['Date'][i]])
+def getStockArray(stock, i, sN):
+    x = np.array([persentage(stock[sN[i]+'_High'][i] ,stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_Low'][i]  ,stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_Close'][i],stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_100ma'][i],stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_200ma'][i],stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_50ma'][i] ,stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_10ma'][i] ,stock[sN[i]+'_Open'][i]),
+                  stock[sN[i]+'_Date'][i]])
     return x
 
 ###################################################################################
@@ -205,11 +205,11 @@ def getStockArray(stock, sN, i):
 ## input: stock
 ## return np.array
 ###################################################################################
-def getStockRArray(stock, sN, i):
-    x = np.array([persentage(stock[sN+'_High'][i] ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Low'][i]  ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Close'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_100ma'][i],stock[sN+'_Open'][i])])
+def getStockRArray(stock, i, sN):
+    x = np.array([persentage(stock[sN[i]+'_High'][i] ,stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_Low'][i]  ,stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_Close'][i],stock[sN[i]+'_Open'][i]),
+                  persentage(stock[sN[i]+'_100ma'][i],stock[sN[i]+'_Open'][i])])
     return x
 
 ###################################################################################
@@ -217,31 +217,31 @@ def getStockRArray(stock, sN, i):
 ## input: df_ohlc - the main stock to be predicted
 ## reference stock or external data that can help predict your stock
 ###################################################################################
-def createDataSet(margeCSV, stocksName):
+def createDataSet(stockData, stocksName):
     #creates fist array
-    x = np.array (   getStockRArray(margeCSV, stocksName[1], 0))
-    x = np.append(x, getStockArray (margeCSV, stocksName[0], 0))
-    x = np.append(x, getStockRArray(margeCSV, stocksName[2], 0))
-    x = np.append(x, getStockRArray(margeCSV, stocksName[3], 0))
-    x = np.append(x, getStockArray (margeCSV, stocksName[0], 0))
-    x = np.append(x, getStockRArray(margeCSV, stocksName[4], 0))
+    x = np.array (   getStockRArray(stockData[1], 0, stocksName))
+    x = np.append(x, getStockArray (stockData[0], 0, stocksName))
+    x = np.append(x, getStockRArray(stockData[2], 0, stocksName))
+    x = np.append(x, getStockRArray(stockData[3], 0, stocksName))
+    x = np.append(x, getStockArray (stockData[0], 0, stocksName))
+    x = np.append(x, getStockRArray(stockData[4], 0, stocksName))
 
 
     #append to the first array till there is 1024 data
     for i in range(1, int(1024/32)):
-        x = np.append(x, getStockRArray(margeCSV, stocksName[1], i))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], i))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[2], i))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[3], i))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], i))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[4], i))
+        x = np.append(x, getStockRArray(stockData[1], i, stocksName))
+        x = np.append(x, getStockArray(stockData[0] , i, stocksName))
+        x = np.append(x, getStockRArray(stockData[2], i, stocksName))
+        x = np.append(x, getStockRArray(stockData[3], i, stocksName))
+        x = np.append(x, getStockArray(stockData[0] , i, stocksName))
+        x = np.append(x, getStockRArray(stockData[4], i, stocksName))
         
     print("data size",x.shape)
     x = x.reshape((32, 32, 1))
     print("data shape", x.shape)
 
     #get label
-    label = margeCSV[stocksName[0]+'_Close'][int(1024/32)]
+    label = stockData[0]['Close'][int(1024/32)]
 
     return x, label
 
@@ -277,9 +277,9 @@ def dataPipeline(dataDates):
     for item in stockPaths: 
         stock_CSVData.append(readCSV(item))
         
-    margeCSV = combineCSV(stock_CSVData, stocksName)
+    combineCSV(stock_CSVData, stocksName)
 
-    dataSetBatch = createDataSet(margeCSV, stocksName)
+    dataSetBatch = createDataSet(stock_CSVData, stocksName)
 '''    
     print (stock_CSVData[0]['Date'][0])
     print (stock_CSVData[1]['Date'][0])
