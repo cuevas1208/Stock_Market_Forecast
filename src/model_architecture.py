@@ -32,7 +32,8 @@ def model(x):
     dropout = .6
     
     #rgb_to_grayscale
-    x = tf.image.rgb_to_grayscale(x, name='grayscale')
+    #x = tf.image.rgb_to_grayscale(x, name='grayscale')
+    print (x.get_shape())
     
     x = tf.nn.l2_normalize(x, 1, epsilon=1e-12, name=None)
     #Layer 1: Convolutional. Input = 32x32x1. Output = 26x26x6.
@@ -43,7 +44,8 @@ def model(x):
     #Pooling. Input = 26x26x5. Output = 13x13x5 out_height = ceil(float(28 - 2 + 1) / float(2)) =  ceil(13.5) = 13
     conv1 = max_pool(conv1)
     conv1  = tf.nn.elu(conv1)   # Activation.
-    
+    print (conv1.get_shape())
+
     x = tf.nn.l2_normalize(x, 1, epsilon=1e-12, name=None)
     # Layer 2: Convolutional. 1Input = 13, 13, 8 Output = 11, 11, 16.
     #out_height = ceil(float(13 - 3 + 1) / float(1)) = 11
@@ -51,13 +53,15 @@ def model(x):
     conv2_b = tf.Variable(tf.zeros(32))
     conv2  = conv2d(conv1, conv2_W)+conv2_b
     conv2  = tf.nn.elu(conv2)   # Activation.
+    print (conv2.get_shape())
     
     x = tf.nn.l2_normalize(x, 1, epsilon=1e-12, name=None)
     conv4_W = tf.Variable(tf.truncated_normal(shape=(1, 1, 32, 1), mean = mu, stddev = sigma))
     conv4_b = tf.Variable(tf.zeros(32))
     conv4  = conv2d(conv2, conv4_W)+conv4_b
     conv4  = tf.nn.elu(conv4)   # Activation.
-    
+
+    print (conv4.get_shape())
     #Layer 2: Convolutional. 1Input = 11, 11, 30 Output = 8, 8, 35.
     #out_height = ceil(float(8 - 4 + 1) / float(1)) = 8
     conv3_W = tf.Variable(tf.truncated_normal(shape=(4, 4, 32, 2), mean = mu, stddev = sigma))

@@ -11,10 +11,12 @@ import random, time
 import pandas_datareader.data as web
 from datetime import datetime, timedelta
 from os import path
+import pickle
 
 
 #using a seed to cotrol training data
 random.seed(1)
+dataLoc = "../data/"
 
 ###################################################################################
 ## HelperFunctions
@@ -25,6 +27,22 @@ random.seed(1)
 def persentage(now, whole):
     part = now - whole;
     return 100 * float(part)/float(whole)
+
+###################################################################################
+## openCSV
+###################################################################################
+def openCSV(filePath):
+    dist_pickle = pickle.load(open(filePath, "rb") )
+    return dist_pickle["items"]
+
+###################################################################################
+## saveCSV
+###################################################################################
+def saveCSV(filePath, items):
+    #Save pre-processed data
+    dist_pickle = {}
+    dist_pickle["items"] = items
+    pickle.dump( dist_pickle, open( filePath, "wb" ))
 
 ##################################################################################
 #  list all sp500
@@ -180,7 +198,6 @@ def combineCSV(CSVfiles, stocksName):
 
     #convert date format to Month and day 
     main_df['Date'] = main_df['Date'].map(lambda x: 100 * x.month + x.day)
-    print (main_df.head())
     
     return(main_df)
 
@@ -218,38 +235,51 @@ def getStockRArray(stock, sN, i):
 ## reference stock or external data that can help predict your stock
 ###################################################################################
 def createDataSet(margeCSV, stocksName):
-    #creates fist array
-    x = np.array (   getStockRArray(margeCSV, stocksName[1], 0))
-    x = np.append(x, getStockArray (margeCSV, stocksName[0], 0))
-    x = np.append(x, getStockRArray(margeCSV, stocksName[2], 0))
-    x = np.append(x, getStockRArray(margeCSV, stocksName[3], 0))
-    x = np.append(x, getStockArray (margeCSV, stocksName[0], 0))
-    x = np.append(x, getStockRArray(margeCSV, stocksName[4], 0))
+
+    dataList = []
+    labelList = []
+
+    print ("detaset length: ", len(margeCSV)-33)
+    
+    for count in range (len(margeCSV)-33):
+    #for count in range (60):   #debugging
+    
+        #creates fist array
+        x = np.array (   getStockRArray(margeCSV, stocksName[1], count))
+        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
+        x = np.append(x, getStockRArray(margeCSV, stocksName[2], count))
+        x = np.append(x, getStockRArray(margeCSV, stocksName[3], count))
+        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
+        x = np.append(x, getStockRArray(margeCSV, stocksName[4], count))
 
 
-    #append to the first array till there is 1024 data
-    for i in range(1, int(1024/32)):
-        x = np.append(x, getStockRArray(margeCSV, stocksName[1], i))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], i))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[2], i))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[3], i))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], i))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[4], i))
-        
-    print("data size",x.shape)
-    x = x.reshape((32, 32, 1))
-    print("data shape", x.shape)
+        #append to the first array till there is 1024 data
+        for i in range(1, int(1024/32)):
+            x = np.append(x, getStockRArray(margeCSV, stocksName[1], i+count))
+            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[2], i+count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[3], i+count))
+            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[4], i+count))
+            
+        x = x.reshape((32, 32, 1))
 
-    #get label
-    label = margeCSV[stocksName[0]+'_Close'][int(1024/32)]
+        #get label
+        label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count-1)],
+                                    margeCSV[stocksName[0]+'_Close'][int(1024/32+count)])
+        labelList.append(label)
+        dataList.append(x)
 
-    return x, label
+        #if count % 10 == 0:
+        #print(count, "out of ", len(margeCSV)-33)
+
+    return dataList, labelList
 
 ###################################################################################
 ## dataPipeline
 ## data set pipeline
 ###################################################################################
-def dataPipeline(dataDates):
+def dataPipeline(dataDates, stockToPredict):
     #Create an sp500 list
     sp500_list = getsp500()
 
@@ -259,7 +289,7 @@ def dataPipeline(dataDates):
 
     #Randomly pick 4 sp500 list
     stocksName = []
-    stocksName.append('TSLA')
+    stocksName.append(stockToPredict)
     stocksName.extend(random.sample(sp500_list, 4))
 
     #Load stock data from web
@@ -276,22 +306,18 @@ def dataPipeline(dataDates):
     stock_CSVData = []
     for item in stockPaths: 
         stock_CSVData.append(readCSV(item))
-        
+
+    #Join data
     margeCSV = combineCSV(stock_CSVData, stocksName)
 
-    dataSetBatch = createDataSet(margeCSV, stocksName)
-'''    
-    print (stock_CSVData[0]['Date'][0])
-    print (stock_CSVData[1]['Date'][0])
+    #Create Data sets
+    x_list, y_list = createDataSet(margeCSV, stocksName)
+
+    saveCSV(dataLoc + "dataSets", [x_list, y_list])
+
+    return x_list, y_list
     
-    dataSetBatch = []
 
-    for i in range (100):
-        #32x32x1
-        dataSetBatch.append(createDataSet(stockCSV_Data))
-
-    return 0
-'''
 ###################################################################################
 ## getDetaSet
 ## returns the 3 dataSets: traing, test, and validation
@@ -300,16 +326,54 @@ def dataPipeline(dataDates):
 ## input: start: dates to train from start
 ##        finish: dates to finish train
 ###################################################################################
+def get_detaSet(dataDates, stockToPredict):
+    # get data
+    # if detasetfile already exist do not create new dataset
+    filePath = dataLoc + "dataSets"
+    if (path.exists(filePath)):
+        print ("opening file ")
+        dataSets = openCSV(filePath)
+        x_list = dataSets[0]
+        y_list = dataSets[0]
+        
+    else:
+        x_list, y_list = dataPipeline(dataDates, stockToPredict)
 
-#find out if data has been store and it is updated
+    #Shuffle and split Training, Test, and Validation data
+    from sklearn.model_selection import train_test_split
 
-#get detaSet
-dataDates = []
-dataDates.append('2010-01-01')
-dataDates.append(datetime.now().date())
+    #get the last 30 items for test\validation
+    x_last30 = x_list[-30:]
+    y_last30 = y_list[-30:]
 
-dataPipeline(dataDates)
+    x_train, x_test, y_train, y_test = train_test_split(x_list, y_list, test_size=0.25, random_state=42)
+    x_test.extend(x_last30)
+    y_test.extend(y_last30)
+
+    x_test, x_valid, y_test, y_valid = train_test_split(x_test, y_test, test_size=0.20, random_state=52)
+
+    assert(len(x_train) == len(y_train))
+    assert(len(x_test) == len(y_test))
+    assert(len(x_valid) == len(y_valid))
+
+    print ("train dataSet lenght: ", len(x_train))
+    print ("test  dataSet lenght: ", len(x_test))
+    print ("valid dataSet lenght: ", len(x_valid))
+
+    #return traing, test,and validation datatest
+    return x_train, x_test, y_train, y_test, x_valid, y_valid
+
+###################################################################################
+## selfRun
+## for testing or example purpose
+###################################################################################
+if __name__ == "__main__":
+    dataDates = []
+    dataDates.append('2010-01-01')
+    dataDates.append(datetime.now().date())
+
+    get_detaSet(dataDates, 'TSLA')
 
 
-#store 3dataSets traing, test, validation in one file
 
+    

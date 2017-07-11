@@ -20,7 +20,7 @@ BATCH_SIZE = 128   #++BATCH_SIZE ++Faster --growth
 
 
 # Features and Labels
-x = tf.placeholder(tf.float32, (None, 32, 32, 3))
+x = tf.placeholder(tf.float32, (None, 32, 32, 1))
 y = tf.placeholder(tf.int32, (None))
 one_hot_y = tf.one_hot(y, 43)
 
@@ -116,7 +116,7 @@ def predict(images, imgLabes, save_file, y_train, X_train):
     saver = tf.train.import_meta_graph(save_file+'.meta')
     
     # Placeholder
-    x = tf.placeholder(tf.float32, (None, 32, 32,3))
+    x = tf.placeholder(tf.float32, (None, 32, 32, 1))
     logits = model(x)
     #soft = tf.nn.softmax(logits)
     top_k = tf.nn.top_k(logits,3)
@@ -132,7 +132,7 @@ def predict(images, imgLabes, save_file, y_train, X_train):
         for i in range (0,len(images)):
             resized_image = tf.image.resize_images(images[i], [32, 32])
             result = sess.run(resized_image)
-            reshaped_image=result.reshape(( 1,32,32,3))
+            reshaped_image=result.reshape(( 1,32,32,1))
             preditcion = sess.run(pred, feed_dict={x: reshaped_image})
             top_indices = sess.run(top_k, feed_dict={x: reshaped_image})
             print("Image ", i, top_indices.indices)
