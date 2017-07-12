@@ -22,7 +22,7 @@ BATCH_SIZE = 128   #++BATCH_SIZE ++Faster --growth
 # Features and Labels
 x = tf.placeholder(tf.float32, (None, 32, 32, 1))
 y = tf.placeholder(tf.int32, (None))
-one_hot_y = tf.one_hot(y, 43)
+#one_hot_y = tf.one_hot(y, 43) no need for one_hot
 
 weights = tf.Variable(tf.zeros([1, 1], dtype=tf.float32))
 bias = tf.Variable(tf.ones([1, 1], dtype=tf.float32))

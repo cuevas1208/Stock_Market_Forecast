@@ -1,5 +1,5 @@
 # Tradebot
-Using maching learning to predict the stock market
+Using convolutional neural network to predict the stock market
 
 ##Overview
 
@@ -7,6 +7,7 @@ This is the code for the Stock Price Prediction. The code uses the [scikit-learn
 
 ##Dependencies
 * numpy (http://www.numpy.org/)
+* pandas (http://pandas.pydata.org/)
 * csv (https://pypi.python.org/pypi/csv)
 * keras (https://keras.io)
 * quandl (https://www.quandl.com/tools/python)
@@ -19,6 +20,3 @@ These links are a good way to learn about some of the depencies used in this pro
 * pandas https://pandas.pydata.org/pandas-docs/stable/whatsnew.html
 * pandas-datareader http://pandas-datareader.readthedocs.io/en/latest/remote_data.html#remote-data-quandlquandl
 
-```
-python demo.py
-```
