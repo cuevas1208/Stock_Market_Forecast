@@ -29,6 +29,23 @@ def persentage(now, whole):
     return 100 * float(part)/float(whole)
 
 ###################################################################################
+## round labels
+###################################################################################
+def roundLabels(y_listNP):
+    #Rond down to .5
+    y_listNP = np.multiply(y_listNP, 2)
+    y_listNP = np.around(y_listNP, decimals=0)
+    y_listNP = np.divide(y_listNP, 2)
+
+    #Round to 10 any nuber greater than 10
+    y_listNP[y_listNP > 10] = 10
+
+    #Round to -10 any nuber less than -10
+    y_listNP[y_listNP < -10] = -10
+
+    return y_listNP
+  
+###################################################################################
 ## openCSV
 ###################################################################################
 def openCSV(filePath):
@@ -265,8 +282,8 @@ def createDataSet(margeCSV, stocksName):
         x = x.reshape((32, 32, 1))
 
         #get label
-        label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count-1)],
-                                    margeCSV[stocksName[0]+'_Close'][int(1024/32+count)])
+        label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count)],
+                                    margeCSV[stocksName[0]+'_Close'][int(1024/32+count)-1])
         labelList.append(label)
         dataList.append(x)
 
@@ -331,13 +348,20 @@ def get_detaSet(dataDates, stockToPredict):
     # if detasetfile already exist do not create new dataset
     filePath = dataLoc + "dataSets"
     if (path.exists(filePath)):
-        print ("opening file ")
+        print ("opening file... ")
         dataSets = openCSV(filePath)
         x_list = dataSets[0]
-        y_list = dataSets[0]
+        y_list = dataSets[1]
         
     else:
         x_list, y_list = dataPipeline(dataDates, stockToPredict)
+
+
+    #Rond labels
+    y_listN = roundLabels(np.array(y_list))
+    classesTotal = len(np.unique(y_listN))
+    print("unic classes: ", classesTotal)
+    
 
     #Shuffle and split Training, Test, and Validation data
     from sklearn.model_selection import train_test_split
@@ -360,8 +384,12 @@ def get_detaSet(dataDates, stockToPredict):
     print ("test  dataSet lenght: ", len(x_test))
     print ("valid dataSet lenght: ", len(x_valid))
 
+    y_train = roundLabels(np.array(y_train))
+    y_test = roundLabels(np.array(y_test))
+    y_valid = roundLabels(np.array(y_valid))
+
     #return traing, test,and validation datatest
-    return x_train, x_test, y_train, y_test, x_valid, y_valid
+    return x_train, x_test, y_train, y_test, x_valid, y_valid, classesTotal 
 
 ###################################################################################
 ## selfRun

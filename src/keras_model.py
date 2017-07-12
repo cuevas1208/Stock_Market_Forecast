@@ -23,7 +23,6 @@ class modelClass:
     def __init__(self):
         self.model = Sequential()
         self.get_model()
-        print("hey")
         
     
     def get_model(self):
@@ -37,6 +36,7 @@ class modelClass:
         self.model.add(Dense(128))
         self.model.add(Activation('relu'))
         self.model.add(Dense(1))
+        # self.model.add(Activation('softmax'))
         # compile self.model using adam
         self.model.compile(optimizer="adam", loss="mse")
 
