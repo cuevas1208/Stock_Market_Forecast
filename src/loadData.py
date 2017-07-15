@@ -44,6 +44,22 @@ def roundLabels(y_listNP):
     y_listNP[y_listNP < -10] = -10
 
     return y_listNP
+
+###################################################################################
+## round detaset
+## rounds to 2 decimals 
+###################################################################################
+def roundDataSet(y_listNP):
+    #Rond down to .5
+    y_listNP = np.around(y_listNP, decimals=2)
+
+    #Round to 12 any nuber greater than 12
+    y_listNP[y_listNP > 12] = 12
+
+    #Round to -12 any nuber less than -12
+    y_listNP[y_listNP < -12] = -12
+
+    return y_listNP
   
 ###################################################################################
 ## openCSV
@@ -231,7 +247,7 @@ def getStockArray(stock, sN, i):
                   persentage(stock[sN+'_200ma'][i],stock[sN+'_Open'][i]),
                   persentage(stock[sN+'_50ma'][i] ,stock[sN+'_Open'][i]),
                   persentage(stock[sN+'_10ma'][i] ,stock[sN+'_Open'][i]),
-                  stock['Date'][i]])
+                  (stock['Date'][i])/100  ])
     return x
 
 ###################################################################################
@@ -361,18 +377,24 @@ def get_detaSet(dataDates, stockToPredict):
     y_listN = roundLabels(np.array(y_list))
     classesTotal = len(np.unique(y_listN))
     print("unic classes: ", classesTotal)
-    
+
+    #Rond dataSet
+    x_listN = roundDataSet(np.array(x_list))
 
     #Shuffle and split Training, Test, and Validation data
     from sklearn.model_selection import train_test_split
 
     #get the last 30 items for test\validation
-    x_last30 = x_list[-30:]
-    y_last30 = y_list[-30:]
+    print(len(x_listN))
+    x_last30 = x_listN[-20:]
+    y_last30 = y_listN[-20:]
+    
+    x_listN = x_listN[0:-20]
+    y_listN = y_listN[0:-20]
 
-    x_train, x_test, y_train, y_test = train_test_split(x_list, y_list, test_size=0.25, random_state=42)
-    x_test.extend(x_last30)
-    y_test.extend(y_last30)
+    x_train, x_test, y_train, y_test = train_test_split(x_listN, y_listN, test_size=0.25, random_state=42)
+    x_test = np.append(x_test,x_last30, axis = 0)
+    y_test = np.append(y_test,y_last30, axis = 0)
 
     x_test, x_valid, y_test, y_valid = train_test_split(x_test, y_test, test_size=0.20, random_state=52)
 

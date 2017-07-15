@@ -28,17 +28,34 @@ class modelClass:
     def get_model(self):
         # Preprocess incoming data
         # Normalize the features using Min-Max scaling centered around zero and reshape
-        self.model.add(Convolution2D(32, 3, 1, input_shape=(32, 32, 1)))
-        self.model.add(MaxPooling2D((2, 2)))
-        self.model.add(Dropout(0.5))
+        self.model.add(Lambda(lambda x: (x/6) - 1., input_shape=(32, 32, 1), output_shape=(32, 32, 1)))
+        print(self.model.output_shape)
+        
+        self.model.add(Convolution2D(4, 2, 2))
+        print(self.model.output_shape)
+        self.model.add(AveragePooling2D((2, 2)))
         self.model.add(Activation('relu'))
+        print(self.model.output_shape)
+
+        self.model.add(Convolution2D(8, 1, 1))
+        self.model.add(Activation('relu'))
+        print(self.model.output_shape)
+        
+        self.model.add(Convolution2D(16, 2, 2))
+        print(self.model.output_shape)
+        self.model.add(AveragePooling2D((2, 2)))
+        self.model.add(Activation('relu'))
+        print(self.model.output_shape)
+        
         self.model.add(Flatten())
-        self.model.add(Dense(128))
+        self.model.add(Activation('relu'))
+        print(self.model.output_shape)
+        
+        self.model.add(Dense(200))
         self.model.add(Activation('relu'))
         self.model.add(Dense(1))
-        # self.model.add(Activation('softmax'))
-        # compile self.model using adam
-        self.model.compile(optimizer="adam", loss="mse")
+        #self.model.add(Activation('softmax'))
+        
 
     '''
     Stores the trained model to json format

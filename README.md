@@ -1,9 +1,12 @@
-# Tradebot
+# Stock Market Forcast
 Using convolutional neural network to predict the stock market
 
 ##Overview
 
 This is the code for the Stock Price Prediction. The code uses the [scikit-learn](https://github.com/scikit-learn/scikit-learn) machine learning library to train a [support vector regression](https://en.wikipedia.org/wiki/Support_vector_machine) on a stock price dataset from [Google Finance](https://en.wikipedia.org/wiki/Support_vector_machine) to predict a future price.
+This porject is an attempt to predict the stock volatility using an Pandas to incorporate Google Finance Stock tools together to get data set. 
+In the data set I will explore the predictive power of different observation and normalization schemes.
+At the end I will compare the model performance with the benchmarks and discuss issues including applications at other frequencies, overfitting, and error statistics.
 
 ##Dependencies
 * numpy (http://www.numpy.org/)
