@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 from numpy.random import normal, uniform
 import numpy as np
+import pickle
 
 """printImg
 Prints two images to compare input and output of a function
@@ -61,3 +62,26 @@ def dataSetInfo(X_train, y_train, X_test, y_test, X_valid, y_valid):
 
     plt.legend()
     plt.show()
+
+###################################################################################
+## given two data points it returns persentage
+###################################################################################
+def persentage(now, whole):
+    part = now - whole;
+    return 100 * float(part)/float(whole)
+
+###################################################################################
+## openCSV
+###################################################################################
+def openCSV(filePath):
+    dist_pickle = pickle.load(open(filePath, "rb") )
+    return dist_pickle["items"]
+
+###################################################################################
+## saveCSV
+###################################################################################
+def saveCSV(filePath, items):
+    #Save pre-processed data
+    dist_pickle = {}
+    dist_pickle["items"] = items
+    pickle.dump( dist_pickle, open( filePath, "wb" ))

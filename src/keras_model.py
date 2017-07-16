@@ -17,20 +17,22 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Flatten, Reshape, Dropout
 from keras.layers.pooling import MaxPooling2D, AveragePooling2D
 from keras.layers import Lambda, ELU
+from data_Prepare import getclassesTotal
 
 class modelClass:
     
     def __init__(self):
-        self.model = Sequential()
+        #self.model = Sequential()
         self.get_model()
         
     
     def get_model(self):
+        self.model = Sequential()
         # Preprocess incoming data
         # Normalize the features using Min-Max scaling centered around zero and reshape
         self.model.add(Lambda(lambda x: (x/6) - 1., input_shape=(32, 32, 1), output_shape=(32, 32, 1)))
         print(self.model.output_shape)
-        
+        #self.model.add(Dense(32, input_shape=(32, 32, 1)))
         self.model.add(Convolution2D(4, 2, 2))
         print(self.model.output_shape)
         self.model.add(AveragePooling2D((2, 2)))
@@ -53,8 +55,14 @@ class modelClass:
         
         self.model.add(Dense(200))
         self.model.add(Activation('relu'))
-        self.model.add(Dense(1))
-        #self.model.add(Activation('softmax'))
+        classes = getclassesTotal()
+        self.model.add(Dense(classes))
+        if (classes > 1):
+            model.add(Dense(classes, activation='softmax'))
+            self.model.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=['accuracy'])
+        else:
+            self.model.compile(optimizer="adam", loss="mse", metrics=['accuracy'])
+        print(self.model.output_shape)
         
 
     '''

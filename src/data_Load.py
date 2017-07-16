@@ -1,81 +1,21 @@
-# loadData.py
+# data_Load.py
 # tail(last item) = most resent date
 # head(first item) = oldest date
 ################################################################################
-import html5lib
 import matplotlib.dates as mdates
 import pandas as pd
 import numpy as np
 import datetime as dt
-import random, time
+import random, time, html5lib
 import pandas_datareader.data as web
 from datetime import datetime, timedelta
 from os import path
 import pickle
-
+from helper_Functions import *
 
 #using a seed to cotrol training data
 random.seed(1)
 dataLoc = "../data/"
-
-###################################################################################
-## HelperFunctions
-###################################################################################
-###################################################################################
-## given two data points it returns persentage
-###################################################################################
-def persentage(now, whole):
-    part = now - whole;
-    return 100 * float(part)/float(whole)
-
-###################################################################################
-## round labels
-###################################################################################
-def roundLabels(y_listNP):
-    #Rond down to .5
-    y_listNP = np.multiply(y_listNP, 2)
-    y_listNP = np.around(y_listNP, decimals=0)
-    y_listNP = np.divide(y_listNP, 2)
-
-    #Round to 10 any nuber greater than 10
-    y_listNP[y_listNP > 10] = 10
-
-    #Round to -10 any nuber less than -10
-    y_listNP[y_listNP < -10] = -10
-
-    return y_listNP
-
-###################################################################################
-## round detaset
-## rounds to 2 decimals 
-###################################################################################
-def roundDataSet(y_listNP):
-    #Rond down to .5
-    y_listNP = np.around(y_listNP, decimals=2)
-
-    #Round to 12 any nuber greater than 12
-    y_listNP[y_listNP > 12] = 12
-
-    #Round to -12 any nuber less than -12
-    y_listNP[y_listNP < -12] = -12
-
-    return y_listNP
-  
-###################################################################################
-## openCSV
-###################################################################################
-def openCSV(filePath):
-    dist_pickle = pickle.load(open(filePath, "rb") )
-    return dist_pickle["items"]
-
-###################################################################################
-## saveCSV
-###################################################################################
-def saveCSV(filePath, items):
-    #Save pre-processed data
-    dist_pickle = {}
-    dist_pickle["items"] = items
-    pickle.dump( dist_pickle, open( filePath, "wb" ))
 
 ##################################################################################
 #  list all sp500
@@ -372,46 +312,8 @@ def get_detaSet(dataDates, stockToPredict):
     else:
         x_list, y_list = dataPipeline(dataDates, stockToPredict)
 
+    return x_list, y_list
 
-    #Rond labels
-    y_listN = roundLabels(np.array(y_list))
-    classesTotal = len(np.unique(y_listN))
-    print("unic classes: ", classesTotal)
-
-    #Rond dataSet
-    x_listN = roundDataSet(np.array(x_list))
-
-    #Shuffle and split Training, Test, and Validation data
-    from sklearn.model_selection import train_test_split
-
-    #get the last 30 items for test\validation
-    print(len(x_listN))
-    x_last30 = x_listN[-20:]
-    y_last30 = y_listN[-20:]
-    
-    x_listN = x_listN[0:-20]
-    y_listN = y_listN[0:-20]
-
-    x_train, x_test, y_train, y_test = train_test_split(x_listN, y_listN, test_size=0.25, random_state=42)
-    x_test = np.append(x_test,x_last30, axis = 0)
-    y_test = np.append(y_test,y_last30, axis = 0)
-
-    x_test, x_valid, y_test, y_valid = train_test_split(x_test, y_test, test_size=0.20, random_state=52)
-
-    assert(len(x_train) == len(y_train))
-    assert(len(x_test) == len(y_test))
-    assert(len(x_valid) == len(y_valid))
-
-    print ("train dataSet lenght: ", len(x_train))
-    print ("test  dataSet lenght: ", len(x_test))
-    print ("valid dataSet lenght: ", len(x_valid))
-
-    y_train = roundLabels(np.array(y_train))
-    y_test = roundLabels(np.array(y_test))
-    y_valid = roundLabels(np.array(y_valid))
-
-    #return traing, test,and validation datatest
-    return x_train, x_test, y_train, y_test, x_valid, y_valid, classesTotal 
 
 ###################################################################################
 ## selfRun

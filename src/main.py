@@ -15,7 +15,8 @@ import keras
 
 
 from keras_model import modelClass
-from loadData import *
+from data_Load import *
+from data_Prepare import *
 
 def genImage(limit, batch, x_data, y_data):
     while 1:
@@ -26,14 +27,23 @@ def genImage(limit, batch, x_data, y_data):
 
 
 if __name__ == '__main__':
-    
     #load data
     dataDates = []
     dataDates.append('2010-01-01')
     dataDates.append(datetime.now().date())
 
-    x_train, x_test, y_train, y_test, x_valid, y_valid, classesTotal = get_detaSet(dataDates, 'TSLA')
+    x_data, y_data = get_detaSet(dataDates, 'TSLA')
 
+    ##########################################################################################
+    # One_hot encoder and split data
+    ##########################################################################################  
+    x_data, y_data= roundDataSet(x_data, y_data)
+    #y_data = oneHot(y_data)
+    x_train, x_test, y_train, y_test, x_valid, y_valid = splitData(x_data, y_data)
+
+    ##########################################################################################
+    # model setup
+    ########################################################################################## 
     #Get model
     keras_model = modelClass()
 
@@ -45,16 +55,17 @@ if __name__ == '__main__':
 
     ##########################################################################################
     # running the model
-    ########################################################################################## 
-    keras_model.model.compile(optimizer="adam", loss="mse", metrics=['accuracy'])
+    ##########################################################################################
     #train the model using the generator function
-    keras_model.model.fit_generator(genImage(sampPerEpoch, batchSize, x_train, y_train),
+    estimator = keras_model.model.fit_generator(genImage(sampPerEpoch, batchSize, x_train, y_train),
                                validation_data = genImage(valSamp, batchSize, x_test, y_test),
                                nb_val_samples=valSamp, samples_per_epoch = sampPerEpoch,
                                nb_epoch=epochs, verbose = 1)##Saving the model
 
+    
+    predictions = estimator.predict(x_valid)
+    print(predictions)
+    #print(encoder.inverse_transform(predictions))
     #Save model
     keras_model.model.savemodel(location = "./TSLA_model")
-
- 
 
