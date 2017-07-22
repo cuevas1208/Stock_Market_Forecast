@@ -12,10 +12,14 @@ from datetime import datetime, timedelta
 from os import path
 import pickle
 from helper_Functions import *
+import time
+import progressbar
 
 #using a seed to cotrol training data
 random.seed(1)
 dataLoc = "../data/"
+
+plt.switch_backend('TkAgg')  
 
 ##################################################################################
 #  list all sp500
@@ -65,17 +69,12 @@ def getWebData(stockName, dataDates):
         end_date = todayDate
 
         # User pandas_reader.data.DataReader to load the desired data. As simple as that.
-        panel_data = web.DataReader(stockName, data_source, start_date, end_date)
-
-        #f = web.DataReader("F", 'yahoo-dividends', start_date, end_date)
-
-        #print(f.head())
-        print(panel_data.head())
-
-        panel_data.to_csv(filePath)
-
-    else:
-        print("file is updated")
+        try:
+            panel_data = web.DataReader(stockName, data_source, start_date, end_date)
+            panel_data.to_csv(filePath)
+        except:
+            print(stockName, "was not found")
+            return (0)
                
     return (filePath)
 
@@ -134,9 +133,12 @@ def readCSV(filePath):
     df['100ma'] = df['Close'].rolling(window=100).mean()
     df['50ma'] = df['Close'].rolling(window=50).mean()
     df['10ma'] = df['Close'].rolling(window=10).mean()
+    
+    #append other columns
+    df = (df.shift(-1) - df)/ df * 100
 
-    #video p.4
-    #df_ohlc = df['Close'].resample('10D').ohlc()
+    #Drop the rows where all of the elements are nan
+    main_df = df.dropna(axis=0, how='any')
     
     df.reset_index(inplace=True)
     return(df)
@@ -144,35 +146,33 @@ def readCSV(filePath):
 ###################################################################################
 ## reads CSV file into dataFrame
 ###################################################################################
-def combineCSV(CSVfiles, stocksName):
+def combineCSV(CSVfiles, keys):
 
     main_df = pd.DataFrame()
    
-    for count, df in enumerate(CSVfiles):
+    for key in (keys):
         
+        df = CSVfiles[key]  
         df.set_index('Date', inplace=True)
         
         df.drop(['Volume'], 1, inplace=True)
-        df = df.add_prefix(stocksName[count]+"_")
+        df = df.add_prefix(key + "_")
 
         if main_df.empty:
             main_df = df
         else:
             main_df = main_df.join(df, how='outer')
-
-        if count % 10 == 0:
-            print(count)
-
+            
     #Drop the rows where all of the elements are nan
-    main_df = main_df.dropna(axis=0, how='any')
+    #main_df = main_df.dropna(axis=0, how='any')
 
     # the index name will be used as column and numbers will be used.
     main_df.reset_index(inplace=True)
 
     #convert date format to Month and day 
-    main_df['Date'] = main_df['Date'].map(lambda x: 100 * x.month + x.day)
-    
-    return(main_df)
+    main_df['Date'] = main_df['Date'].map(lambda x: (100 * x.month + x.day)/100)
+
+    return(main_df, keys)
 
 ###################################################################################
 ## getStockArray
@@ -180,14 +180,14 @@ def combineCSV(CSVfiles, stocksName):
 ## return np.array
 ###################################################################################
 def getStockArray(stock, sN, i):
-    x = np.array([persentage(stock[sN+'_High'][i] ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Low'][i]  ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Close'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_100ma'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_200ma'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_50ma'][i] ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_10ma'][i] ,stock[sN+'_Open'][i]),
-                  (stock['Date'][i])/100  ])
+    x = np.array([stock[sN+'_High'][i],
+                  stock[sN+'_Low'][i]  ,
+                  stock[sN+'_Close'][i],
+                  stock[sN+'_100ma'][i],
+                  stock[sN+'_200ma'][i],
+                  stock[sN+'_50ma'][i] ,
+                  stock[sN+'_10ma'][i] ,
+                  stock['Date'][i]])
     return x
 
 ###################################################################################
@@ -196,10 +196,10 @@ def getStockArray(stock, sN, i):
 ## return np.array
 ###################################################################################
 def getStockRArray(stock, sN, i):
-    x = np.array([persentage(stock[sN+'_High'][i] ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Low'][i]  ,stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_Close'][i],stock[sN+'_Open'][i]),
-                  persentage(stock[sN+'_100ma'][i],stock[sN+'_Open'][i])])
+    x = np.array([stock[sN+'_High'][i],
+                  stock[sN+'_Low'][i]  ,
+                  stock[sN+'_Close'][i],
+                  stock[sN+'_100ma'][i]])
     return x
 
 ###################################################################################
@@ -213,83 +213,94 @@ def createDataSet(margeCSV, stocksName):
     labelList = []
 
     print ("detaset length: ", len(margeCSV)-33)
-    
-    for count in range (len(margeCSV)-33):
-    #for count in range (60):   #debugging
-    
-        #creates fist array
-        x = np.array (   getStockRArray(margeCSV, stocksName[1], count))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[2], count))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[3], count))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[4], count))
+    with progressbar.ProgressBar(max_value= len(margeCSV)-33) as bar:
+        for count in range (len(margeCSV)-33):
+        #for count in range (60):   #debugging
+        
+            #creates fist array
+            x = np.array (   getStockRArray(margeCSV, stocksName[1], count))
+            x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[2], count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[3], count))
+            x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[4], count))
 
 
-        #append to the first array till there is 1024 data
-        for i in range(1, int(1024/32)):
-            x = np.append(x, getStockRArray(margeCSV, stocksName[1], i+count))
-            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[2], i+count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[3], i+count))
-            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[4], i+count))
-            
-        x = x.reshape((32, 32, 1))
+            #append to the first array till there is 1024 data
+            for i in range(1, int(1024/32)):
+                x = np.append(x, getStockRArray(margeCSV, stocksName[1], i+count))
+                x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
+                x = np.append(x, getStockRArray(margeCSV, stocksName[2], i+count))
+                x = np.append(x, getStockRArray(margeCSV, stocksName[3], i+count))
+                x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
+                x = np.append(x, getStockRArray(margeCSV, stocksName[4], i+count))
+                
+            x = x.reshape((32, 32, 1))
 
-        #get label
-        label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count)],
-                                    margeCSV[stocksName[0]+'_Close'][int(1024/32+count)-1])
-        labelList.append(label)
-        dataList.append(x)
+            #get label
+            label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count)],
+                                        margeCSV[stocksName[0]+'_Close'][int(1024/32+count)-1])
+            labelList.append(label)
+            dataList.append(x)
 
-        #if count % 10 == 0:
-        #print(count, "out of ", len(margeCSV)-33)
+            time.sleep(0.005)
+            bar.update(count)
 
     return dataList, labelList
+
 
 ###################################################################################
 ## dataPipeline
 ## data set pipeline
 ###################################################################################
 def dataPipeline(dataDates, stockToPredict):
-    #Create an sp500 list
-    sp500_list = getsp500()
-
-    #get Fundamental data stocks that drive the market
-    #petrolium price, usa dollar, gold, 
-    #getFundamentalData()
-
-    #Randomly pick 4 sp500 list
-    stocksName = []
-    stocksName.append(stockToPredict)
-    stocksName.extend(random.sample(sp500_list, 4))
-
-    #Load stock data from web
-    stockPaths = []
-    for item in stocksName:
-        stockPaths.append(getWebData(item,dataDates))
-    print(stockPaths)
-
-
-    #################################################
-    ##Loop to create dataframes
-    #################################################
-    #Read CSV files and append each other to one data 
-    stock_CSVData = []
-    for item in stockPaths: 
-        stock_CSVData.append(readCSV(item))
-
-    #Join data
-    margeCSV = combineCSV(stock_CSVData, stocksName)
-
-    #Create Data sets
-    x_list, y_list = createDataSet(margeCSV, stocksName)
-
-    saveCSV(dataLoc + "dataSets", [x_list, y_list])
-
-    return x_list, y_list
+    #if detasetfile already exist do not create new dataset
+    filePath = dataLoc + "dataSets"
+    if (path.exists(filePath)):
+    #if (0):
+        print ("opening file... ")
+        stock_CSVData = openCSV(filePath)
     
+    else:
+        #Create an sp500 list
+        sp500_list = getsp500()
+
+        #get Fundamental data stocks that drive the market
+        #petrolium price, usa dollar, gold, 
+        #getFundamentalData()
+
+        #Load stock data from web
+        stockPaths = []
+        for item in sp500_list:
+            stockPath = getWebData(item,dataDates)
+            if (stockPath):
+                stockPaths.append(stockPath)
+            else:
+                #removes the first matching value
+                sp500_list.remove(item)
+
+        #################################################
+        ##Loop to create dataframes
+        #################################################
+        #Read CSV files and append each other to one data 
+        stock_CSVData = {}
+
+        for i, item in enumerate(stockPaths):
+            if not stock_CSVData:
+                stock_CSVData = ({sp500_list[i]: readCSV(item)})
+            else:
+                stock_CSVData.update({sp500_list[i]: readCSV(item)})
+
+        saveCSV(dataLoc + "dataSets", stock_CSVData)
+
+
+    #load your stock       
+    if (not stockToPredict in stock_CSVData):
+        stPath = getWebData(stockToPredict,dataDates)
+        stock_CSVData.update({stockToPredict: readCSV(stPath)})
+
+    return stock_CSVData
+
 
 ###################################################################################
 ## getDetaSet
@@ -300,17 +311,17 @@ def dataPipeline(dataDates, stockToPredict):
 ##        finish: dates to finish train
 ###################################################################################
 def get_detaSet(dataDates, stockToPredict):
+
     # get data
-    # if detasetfile already exist do not create new dataset
-    filePath = dataLoc + "dataSets"
-    if (path.exists(filePath)):
-        print ("opening file... ")
-        dataSets = openCSV(filePath)
-        x_list = dataSets[0]
-        y_list = dataSets[1]
-        
-    else:
-        x_list, y_list = dataPipeline(dataDates, stockToPredict)
+    stock_CSVData = dataPipeline(dataDates, stockToPredict)
+
+    #Join data
+    keys = random.sample(list(stock_CSVData), 5)
+    keys[0] = stockToPredict
+    df_margeCSV, stocksName = combineCSV(stock_CSVData, keys)
+
+    #Create Data sets
+    x_list, y_list = createDataSet(df_margeCSV, stocksName)
 
     return x_list, y_list
 

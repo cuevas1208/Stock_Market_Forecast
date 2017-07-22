@@ -68,6 +68,9 @@ def oneHot(Y):
     flag_OneHot = 1
     return dummy_y
 
+##########################################################################################
+# splitData
+################################################################################
 def splitData(x_listN, y_listN):
     #get the last 30 items for test\validation
     x_last30 = x_listN[-20:]

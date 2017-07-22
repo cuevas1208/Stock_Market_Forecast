@@ -68,7 +68,10 @@ def dataSetInfo(X_train, y_train, X_test, y_test, X_valid, y_valid):
 ###################################################################################
 def persentage(now, whole):
     part = now - whole;
-    return 100 * float(part)/float(whole)
+    if (whole):
+        return 100 * float(part)/float(whole)
+    else:
+        return 0
 
 ###################################################################################
 ## openCSV
