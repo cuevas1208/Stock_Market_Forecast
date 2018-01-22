@@ -10,10 +10,9 @@ import random, time, html5lib
 import pandas_datareader.data as web
 from datetime import datetime, timedelta
 from os import path
-import pickle
 from helper_Functions import *
 import time
-import progressbar
+from tqdm import tqdm
 
 #using a seed to cotrol training data
 random.seed(1)
@@ -213,38 +212,38 @@ def createDataSet(margeCSV, stocksName):
     labelList = []
 
     print ("detaset length: ", len(margeCSV)-33)
-    with progressbar.ProgressBar(max_value= len(margeCSV)-33) as bar:
-        for count in range (len(margeCSV)-33):
-        #for count in range (60):   #debugging
-        
-            #creates fist array
-            x = np.array (   getStockRArray(margeCSV, stocksName[1], count))
-            x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[2], count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[3], count))
-            x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[4], count))
+    #with progressbar.ProgressBar(max_value= len(margeCSV)-33) as bar:
+    for count in tqdm(range (len(margeCSV)-33)):
+    #for count in range (60):   #debugging
+    
+        #creates fist array
+        x = np.array (   getStockRArray(margeCSV, stocksName[1], count))
+        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
+        x = np.append(x, getStockRArray(margeCSV, stocksName[2], count))
+        x = np.append(x, getStockRArray(margeCSV, stocksName[3], count))
+        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
+        x = np.append(x, getStockRArray(margeCSV, stocksName[4], count))
 
 
-            #append to the first array till there is 1024 data
-            for i in range(1, int(1024/32)):
-                x = np.append(x, getStockRArray(margeCSV, stocksName[1], i+count))
-                x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
-                x = np.append(x, getStockRArray(margeCSV, stocksName[2], i+count))
-                x = np.append(x, getStockRArray(margeCSV, stocksName[3], i+count))
-                x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
-                x = np.append(x, getStockRArray(margeCSV, stocksName[4], i+count))
-                
-            x = x.reshape((32, 32, 1))
+        #append to the first array till there is 1024 data
+        for i in range(1, int(1024/32)):
+            x = np.append(x, getStockRArray(margeCSV, stocksName[1], i+count))
+            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[2], i+count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[3], i+count))
+            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
+            x = np.append(x, getStockRArray(margeCSV, stocksName[4], i+count))
+            
+        x = x.reshape((32, 32, 1))
 
-            #get label
-            label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count)],
-                                        margeCSV[stocksName[0]+'_Close'][int(1024/32+count)-1])
-            labelList.append(label)
-            dataList.append(x)
+        #get label
+        label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count)],
+                                    margeCSV[stocksName[0]+'_Close'][int(1024/32+count)-1])
+        labelList.append(label)
+        dataList.append(x)
 
-            time.sleep(0.005)
-            bar.update(count)
+        time.sleep(0.005)
+        #bar.update(count)
 
     return dataList, labelList
 
@@ -256,8 +255,8 @@ def createDataSet(margeCSV, stocksName):
 def dataPipeline(dataDates, stockToPredict):
     #if detasetfile already exist do not create new dataset
     filePath = dataLoc + "dataSets"
-    if (path.exists(filePath)):
-    #if (0):
+    #if (path.exists(filePath)):
+    if (0):
         print ("opening file... ")
         stock_CSVData = openCSV(filePath)
     
