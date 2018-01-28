@@ -51,7 +51,7 @@ if __name__ == '__main__':
     batchSize = 32
     sampPerEpoch = len(x_train)-(len(x_train)%batchSize)
     valSamp =      len(x_test) -(len(x_test)%batchSize)
-    epochs = 10
+    epochs = 3
 
     ##########################################################################################
     # running the model

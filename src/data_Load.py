@@ -1,4 +1,5 @@
 # data_Load.py
+# loads stock values from Google
 # tail(last item) = most resent date
 # head(first item) = oldest date
 ################################################################################
@@ -13,12 +14,19 @@ from os import path
 from helper_Functions import *
 import time
 from tqdm import tqdm
+import argparse
+import logging
+logger = logging.getLogger()
+from visualize import *
 
-#using a seed to cotrol training data
+#using a seed to control training data
 random.seed(1)
 dataLoc = "../data/"
 
 plt.switch_backend('TkAgg')  
+
+#time after algorithm can get new data from Google
+timeTreshold = 12
 
 ##################################################################################
 #  list all sp500
@@ -35,14 +43,16 @@ def getsp500():
     else:
         #load list from CSV file
         #https://stackoverflow.com/questions/19699367/unicodedecodeerror-utf-8-codec-cant-decode-byte
-        df = pd.read_csv(filePath,encoding = "ISO-8859-1")
+        df = pd.read_csv(filePath, encoding = "ISO-8859-1")
     
     return (df['Ticker symbol'].tolist())
 
 ##################################################################################
-# Dowloads data and save it as CSV
-# to get fundamentals you would have to pay
+# Downloads data and save it as CSV
+# To get fundamentals you would have to pay
 # https://www.reddit.com/r/algotrading/comments/4byj5k/is_there_a_python_script_to_get_historical/
+# if data is older than a day reload data other wise use the same one from the CSV
+# Retunr: the file path where the CSV file is stored
 ##################################################################################
 def getWebData(stockName, dataDates):
 
@@ -57,23 +67,28 @@ def getWebData(stockName, dataDates):
         fileDate = datetime.fromtimestamp(path.getmtime(filePath)).date()
     else:
         fileDate = datetime.now().date() - timedelta(days=1)
-        
+    
     if todayDate > fileDate:
+        now = dt.datetime.now()
+        if (now.hour > 12):
         
-        # Define which online source one should use
-        data_source = 'google'
+            # Define which on-line source one should use
+            data_source = 'yahoo'
 
-        # We would like all available data from dataDates[0] until dataDates[1]
-        start_date = dataDates[0]
-        end_date = todayDate
+            # We would like all available data from dataDates[0] until dataDates[1]
+            start_date = dataDates[0]
+            end_date = todayDate
 
-        # User pandas_reader.data.DataReader to load the desired data. As simple as that.
-        try:
-            panel_data = web.DataReader(stockName, data_source, start_date, end_date)
-            panel_data.to_csv(filePath)
-        except:
-            print(stockName, "was not found")
-            return (0)
+            # User pandas_reader.data.DataReader to load the desired data. As simple as that.
+            try:
+            	#import pandas_datareader as web
+            	#df = web.get_data_yahoo('GOOG', start_date, end_date)﻿
+                panel_data = web.DataReader(stockName, data_source, start_date, end_date)
+                panel_data.to_csv(filePath)
+            except:
+                print(stockName, "had probles been downloaded")
+                if not (path.exists(filePath)):
+                    return (0)
                
     return (filePath)
 
@@ -110,8 +125,6 @@ def getFundamentalData(stockName = "FRED/GDP"):
         # User pandas_reader.data.DataReader to load the desired data. As simple as that.
         panel_data = quandl.get(stockName, start_date="2001-12-31", end_date = todayDate)
 
-        print(panel_data.head())
-
         panel_data.to_csv(filePath)
 
     else:
@@ -119,31 +132,39 @@ def getFundamentalData(stockName = "FRED/GDP"):
                
     return (filePath)
 
-
 ###################################################################################
 ## reads CSV file into dataFrame
+## writes every column in daily % change 
 ###################################################################################
-def readCSV(filePath):
-    #load csv file 
-    df = pd.read_csv(filePath, parse_dates = True, index_col=0)
+def readCSV(filePath, days = 0):
+	#load csv file 
+	df = pd.read_csv(filePath, parse_dates = True, index_col=0)
 
-    #append other columns
-    df['200ma'] = df['Close'].rolling(window=200).mean()
-    df['100ma'] = df['Close'].rolling(window=100).mean()
-    df['50ma'] = df['Close'].rolling(window=50).mean()
-    df['10ma'] = df['Close'].rolling(window=10).mean()
-    
-    #append other columns
-    df = (df.shift(-1) - df)/ df * 100
+	#append other columns
+	df['200ma'] = df['Close'].rolling(window=200).mean()
+	df['100ma'] = df['Close'].rolling(window=100).mean()
+	df['50ma'] = df['Close'].rolling(window=50).mean()
+	df['10ma'] = df['Close'].rolling(window=10).mean()
 
-    #Drop the rows where all of the elements are nan
-    main_df = df.dropna(axis=0, how='any')
-    
-    df.reset_index(inplace=True)
-    return(df)
+	if (logger.getEffectiveLevel() == logging.DEBUG):
+		#displaying 100ma vs Adj Close
+		axBarGraph(index = df.index, ax1Data = df['Adj Close'], \
+			ax2Data  = df['100ma'], barData = df['Volume'])
+
+	if (logger.getEffectiveLevel() == logging.DEBUG):
+		candlestickGraph(df)
+
+	#append other columns
+	if(days):
+		df = round(((df - df.shift(days))/df.shift(days) * 100),2)
+
+	#When we reset the index, the old index is added as a column, and a new sequential index is used
+	#inplace=True, modefy the current table do not return a new
+	df.reset_index(inplace=True)
+	return(df)
 
 ###################################################################################
-## reads CSV file into dataFrame
+## combine CSV files into dataFrame
 ###################################################################################
 def combineCSV(CSVfiles, keys):
 
@@ -173,104 +194,33 @@ def combineCSV(CSVfiles, keys):
 
     return(main_df, keys)
 
-###################################################################################
-## getStockArray
-## input: stock
-## return np.array
-###################################################################################
-def getStockArray(stock, sN, i):
-    x = np.array([stock[sN+'_High'][i],
-                  stock[sN+'_Low'][i]  ,
-                  stock[sN+'_Close'][i],
-                  stock[sN+'_100ma'][i],
-                  stock[sN+'_200ma'][i],
-                  stock[sN+'_50ma'][i] ,
-                  stock[sN+'_10ma'][i] ,
-                  stock['Date'][i]])
-    return x
-
-###################################################################################
-## getStockArray
-## input: stock
-## return np.array
-###################################################################################
-def getStockRArray(stock, sN, i):
-    x = np.array([stock[sN+'_High'][i],
-                  stock[sN+'_Low'][i]  ,
-                  stock[sN+'_Close'][i],
-                  stock[sN+'_100ma'][i]])
-    return x
-
-###################################################################################
-## convert data into a (32,32,1)
-## input: df_ohlc - the main stock to be predicted
-## reference stock or external data that can help predict your stock
-###################################################################################
-def createDataSet(margeCSV, stocksName):
-
-    dataList = []
-    labelList = []
-
-    print ("detaset length: ", len(margeCSV)-33)
-    #with progressbar.ProgressBar(max_value= len(margeCSV)-33) as bar:
-    for count in tqdm(range (len(margeCSV)-33)):
-    #for count in range (60):   #debugging
-    
-        #creates fist array
-        x = np.array (   getStockRArray(margeCSV, stocksName[1], count))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[2], count))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[3], count))
-        x = np.append(x, getStockArray (margeCSV, stocksName[0], count))
-        x = np.append(x, getStockRArray(margeCSV, stocksName[4], count))
-
-
-        #append to the first array till there is 1024 data
-        for i in range(1, int(1024/32)):
-            x = np.append(x, getStockRArray(margeCSV, stocksName[1], i+count))
-            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[2], i+count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[3], i+count))
-            x = np.append(x, getStockArray (margeCSV, stocksName[0], i+count))
-            x = np.append(x, getStockRArray(margeCSV, stocksName[4], i+count))
-            
-        x = x.reshape((32, 32, 1))
-
-        #get label
-        label = persentage(margeCSV[stocksName[0]+'_Close'][int(1024/32+count)],
-                                    margeCSV[stocksName[0]+'_Close'][int(1024/32+count)-1])
-        labelList.append(label)
-        dataList.append(x)
-
-        time.sleep(0.005)
-        #bar.update(count)
-
-    return dataList, labelList
-
 
 ###################################################################################
 ## dataPipeline
-## data set pipeline
+## creates a data set, if this is your first time running this code, I would recommend
+## delating previews data sets or you may have issues with pickle due to the 
+## dispcrepanci in pndas_dataReader verison.
+##  
 ###################################################################################
 def dataPipeline(dataDates, stockToPredict):
     #if detasetfile already exist do not create new dataset
     filePath = dataLoc + "dataSets"
-    #if (path.exists(filePath)):
-    if (0):
+    if (path.exists(filePath)):
         print ("opening file... ")
         stock_CSVData = openCSV(filePath)
-    
+        logging.debug("stock_CSVData",stock_CSVData)
     else:
-        #Create an sp500 list
+        #Create/get sp500 name list
         sp500_list = getsp500()
 
         #get Fundamental data stocks that drive the market
         #petrolium price, usa dollar, gold, 
         #getFundamentalData()
 
-        #Load stock data from web
+        #Store stock web address it in CSV files
         stockPaths = []
         for item in sp500_list:
+        	#gets the file path where the CSV file is stored
             stockPath = getWebData(item,dataDates)
             if (stockPath):
                 stockPaths.append(stockPath)
@@ -293,49 +243,45 @@ def dataPipeline(dataDates, stockToPredict):
         saveCSV(dataLoc + "dataSets", stock_CSVData)
 
 
-    #load your stock       
+    #load your stock if it hasn't loaded   
     if (not stockToPredict in stock_CSVData):
-        stPath = getWebData(stockToPredict,dataDates)
+        stPath = getWebData(stockToPredict, dataDates)
         stock_CSVData.update({stockToPredict: readCSV(stPath)})
 
     return stock_CSVData
 
 
 ###################################################################################
-## getDetaSet
-## returns the 3 dataSets: traing, test, and validation
-## if dataset is updated it it will just load it from a file
-## otherwise it will and data new data to the old dataset and train and store data
-## input: start: dates to train from start
-##        finish: dates to finish train
-###################################################################################
-def get_detaSet(dataDates, stockToPredict):
-
-    # get data
-    stock_CSVData = dataPipeline(dataDates, stockToPredict)
-
-    #Join data
-    keys = random.sample(list(stock_CSVData), 5)
-    keys[0] = stockToPredict
-    df_margeCSV, stocksName = combineCSV(stock_CSVData, keys)
-
-    #Create Data sets
-    x_list, y_list = createDataSet(df_margeCSV, stocksName)
-
-    return x_list, y_list
-
-
-###################################################################################
 ## selfRun
-## for testing or example purpose
+## for testing or example purpose 
 ###################################################################################
 if __name__ == "__main__":
+    import sys
+    # Instantiate the parser
+    # logging.basicConfig(filename='log.log', level=logging.INFO)
+    parser = argparse.ArgumentParser(description='Optional app description')
+
+    #Debug
+    parser.add_argument('-v', "--verbose", action='store_true',
+                        help='Type -v to do debugging')
+
+    args = parser.parse_args()
+
+    if(args.verbose):
+        logger.setLevel(logging.DEBUG)
+    '''
+    emaples
+    #logging.info('So should this')
+    #logging.warning('And this, too')
+    '''
+    #################################################################################
+
+    stockToPredict = 'TSLA'
+    
     dataDates = []
     dataDates.append('2010-01-01')
     dataDates.append(datetime.now().date())
-
-    get_detaSet(dataDates, 'TSLA')
-
-
-
     
+    #from csv file with all the stocks from sp500
+    #dataPipeline returns a data set to train with 5 random stocks
+    df = dataPipeline(dataDates, stockToPredict)

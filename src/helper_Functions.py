@@ -64,12 +64,12 @@ def dataSetInfo(X_train, y_train, X_test, y_test, X_valid, y_valid):
     plt.show()
 
 ###################################################################################
-## given two data points it returns persentage
+## given two data points it returns the percentage of the difference 
 ###################################################################################
-def persentage(now, whole):
-    part = now - whole;
-    if (whole):
-        return 100 * float(part)/float(whole)
+def persentage(now, before):
+    part = now - before;
+    if (before):
+        return 100 * float(part)/float(before)
     else:
         return 0
 
@@ -77,7 +77,10 @@ def persentage(now, whole):
 ## openCSV
 ###################################################################################
 def openCSV(filePath):
+
     dist_pickle = pickle.load(open(filePath, "rb") )
+    #import panda as pd
+    #pd.read_pickle('foo.pkl')
     return dist_pickle["items"]
 
 ###################################################################################

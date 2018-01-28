@@ -66,7 +66,7 @@ class modelClass:
         
 
     '''
-    Stores the trained model to json format
+    Stores the trained model in json format
     Input:  model - trained model
             location, - folder location
     Return: void '''

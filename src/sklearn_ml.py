@@ -16,6 +16,17 @@ from collections import Counter
 import pickle, requests
 from sklearn import svm, cross_validation, neighbors
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier
+import argparse
+import logging
+logger = logging.getLogger()
+
+PREDICTION_DAYS = 7
+DATASET_LEN = 10
+
+stockToPredict = 'TSLA'
+ticker = stockToPredict +'_High'
+
+treshold = 0.02
 
 ##########################################################
 #Data correlation
@@ -50,55 +61,58 @@ def detaCorrelation(df, stocksName):
 
 ###################################################################################
 # process_data_for_labels
-# input days to analize data 
+# input days to analyze data 
+# is would output the percentage increase/decrease of the stock in PREDICTION_DAYS
+# by shifting the columns to PREDICTION_DAYS
 ###################################################################################
 def process_data_for_labels(ticker, df):
-    hm_days = 7
-    tickers = df.columns.values.tolist()
-    df.fillna(0, inplace=True)
 
-    print(len(df.columns))
-    
-    for i in range(1,hm_days+1):
-        df['{}_{}d'.format(ticker,i)] = (df[ticker].shift(-i) - df[ticker]) / df[ticker]
-    print("after")
-    print(len(df.columns))
+    #delete all NAN array with rows deleted
+    df.dropna(subset=[ticker],inplace=True)
+    logging.debug("df shape after eliminating NAN from labels", df.shape)
+
+    #get future labels for classification
+    df['{}_labels'.format(ticker)] = \
+    (df[ticker].shift(-PREDICTION_DAYS) - df[ticker]) / df[ticker]
+
+    #return a list of labels with no NAN
+    df.dropna(subset=['{}_labels'.format(ticker)],inplace=True)
+    logging.debug("df shape after eliminating NAN from labels", df.shape)
+
+    logging.debug("labels with days difference",df['{}_labels'.format(ticker)] )
+
+    #transform labels in to 1, 0 and -1 
+    df['{}_labels'.format(ticker)] = list(map( buy_sell_hold, df['{}_labels'.format(ticker)]))
+    logging.debug("labels after the one_hot",df['{}_labels'.format(ticker)])
+
+    #visulaize the spred
+    vals = df['{}_labels'.format(ticker)].values.tolist()
+    str_vals = [str(i) for i in vals]
+    print('Data spread:',Counter(str_vals), "total labels: ", len(vals))
         
-    df.fillna(0, inplace=True)
-    return tickers, df
+    return df
 
 ###################################################################################
 # set the classifier
+'''str_vals is a list of our data labels 
+        -1  = decrees
+        0   = stayed same
+        -1  = increased                    '''
 ###################################################################################
-def buy_sell_hold(*args):
+def buy_sell_hold(*args, treshold = 0.02):
     cols = [c for c in args]
-    requirement = 0.02
     for col in cols:
-        if col > requirement:
+        if col > treshold:
             return 1
-        if col < -requirement:
+        if col < -treshold:
             return -1
     return 0
 
 ###################################################################################
 # extract_featuresets
 ###################################################################################
-def extract_featuresets(ticker, df_features):
-    tickers, df = process_data_for_labels(ticker, df_features)
-
-    df['{}_target'.format(ticker)] = list(map( buy_sell_hold,
-                                               df['{}_1d'.format(ticker)],
-                                               df['{}_2d'.format(ticker)],
-                                               df['{}_3d'.format(ticker)],
-                                               df['{}_4d'.format(ticker)],
-                                               df['{}_5d'.format(ticker)],
-                                               df['{}_6d'.format(ticker)],
-                                               df['{}_7d'.format(ticker)] ))
-
-
-    vals = df['{}_target'.format(ticker)].values.tolist()
-    str_vals = [str(i) for i in vals]
-    print('Data spread:',Counter(str_vals), "total labels: ", len(vals))
+def extract_featuresets(ticker, df):
+    tickers = df.columns.values.tolist()
 
     #handles invalid numbers
     df.fillna(0, inplace=True)
@@ -106,25 +120,29 @@ def extract_featuresets(ticker, df_features):
     df.dropna(inplace=True)
 
     #tickers == to all the column labels used for features excluding labels
+    #pct_change() normilize the value to be percente chage from yesterday
     df_vals = df[[ticker for ticker in tickers]].pct_change()
     df_vals = df_vals.replace([np.inf, -np.inf], 0)
     df_vals.fillna(0, inplace=True)
-    print("features ", " shape:  ", df_vals.shape)
+    print("x features shape:  ", df_vals.shape)
     
     X = df_vals.values
-    y = df['{}_target'.format(ticker)].values
+    y = df['{}_labels'.format(ticker)].values
     
     return X,y,df
+
 
 ###################################################################################
 # trainData
 ###################################################################################
-def do_ml(ticker, df_features):
-    X, y, df = extract_featuresets(ticker, df_features)
+def do_ml(X, y):
+    
+    logging.debug("X sample: \ {} ".format(len(X.shape)))
 
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,
-                                                        y,
-                                                        test_size=0.25)
+    logging.debug("y sample: \ {} ".format(len(y.shape)))
+
+    X_train, X_test, y_train, y_test = cross_validation.train_test_split( \
+        X , y, test_size=0.25)
     
     #combine the predictions of several base estimators
     clf = VotingClassifier([('lsvc',svm.LinearSVC()),
@@ -132,6 +150,11 @@ def do_ml(ticker, df_features):
                             ('rfor',RandomForestClassifier())])
 
     clf.fit(X_train, y_train)
+
+    y_pred = clf.predict(X_test)
+    np.set_printoptions(precision=2)
+    print(np.around((y_pred - y_test), 2))
+
     confidence = clf.score(X_test, y_test)
     print('accuracy:',confidence)
     predictions = clf.predict(X_test)
@@ -140,21 +163,85 @@ def do_ml(ticker, df_features):
 
     return confidence
 
+def method1 (stockName, df_features):
+    X, y, df = extract_featuresets(stockName, df_features)
+    do_ml(X, y)
+
+def method2 (stockName, df):
+    #prepare label
+    y = df['{}_labels'.format(ticker)].values
+
+    #ToDo: how to consider the relevant data to train on 
+    #detaCorrelation(df, stocksName)
+    #do_ml(df[stockToPredict]['Close'], df_features)
+
+    #prepare X
+    df['x_features'] = df[stockToPredict + '_Low'] + df[stockToPredict + '_High'] / 2
+
+    #pct_change() normalize the value to be percent change from yesterday
+    df['x_features'] = df['x_features'].pct_change()
+
+    #creating features for prediction 
+    x = df['x_features'].values 
+    for i in range(1, DATASET_LEN):
+        x = np.dstack((x, df['x_features'].shift(-i).values))
+
+    print (x[0])
+    x = x[0]
+    mask = ~np.isnan(x).any(axis=1)
+
+    #clean dataset
+    x = x[mask]
+    y = y[mask]
+
+    logging.debug(x.shape)
+    logging.debug(y.shape)
+
+    do_ml(x, y)
+    ###########################################################
+
 ###################################################################################
 # main
 ###################################################################################
 if __name__ == "__main__":
-    stockToPredict = 'TSLA'
-    
+    import sys
+    # Instantiate the parser
+    # logging.basicConfig(filename='log.log', level=logging.INFO)
+    parser = argparse.ArgumentParser(description='Optional app description')
+
+    #Debug
+    parser.add_argument('-v', "--verbose", action='store_true',
+                        help='Type -v to do debugging')
+
+    args = parser.parse_args()
+
+    if(args.verbose):
+        logger.setLevel(logging.DEBUG)
+    '''
+    emaples
+    #logging.info('So should this')
+    #logging.warning('And this, too')
+    '''
+    #################################################################################
     dataDates = []
     dataDates.append('2010-01-01')
     dataDates.append(datetime.now().date())
     
+    #from csv file with all the stocks from sp500
+    #dataPipeline returns a data set to train with 5 random stocks
     df = dataPipeline(dataDates, stockToPredict)
     df_features, stocksName = combineCSV(df, df.keys())
-    print(df_features["Date"].head())
-  
-    #detaCorrelation(df, stocksName)
-    #do_ml(df[stockToPredict]['Close'], df_features)
-    do_ml(stockToPredict+'_Close', df_features)
-    ###########################################################
+
+    if (logger.getEffectiveLevel() == logging.DEBUG):
+        logging.debug("Loaded most resent sample: \ {} ".format(df_features.tail(2)))
+        df_features[stockToPredict+'_High'].plot()
+        plt.show()
+
+    #change values to persentage of change for the days intended to predict
+    df = process_data_for_labels(ticker, df_features)
+
+    #method1(ticker, df)
+
+    method2(ticker, df)
+    ###############################################################################
+
