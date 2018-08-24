@@ -5,21 +5,19 @@
 ################################################################################
 import matplotlib.dates as mdates
 import pandas as pd
-import numpy as np
 import datetime as dt
-import random, time, html5lib
+import random
 import pandas_datareader.data as web
 from datetime import datetime, timedelta
 from os import path
-from helper_Functions import *
-import time
-from tqdm import tqdm
-import argparse
 import logging
 logger = logging.getLogger()
+
+# import local packages
+from helper_Functions import *
 from visualize import *
 
-#using a seed to control training data
+# using a seed to control training data
 random.seed(1)
 dataLoc = "../data/"
 
@@ -81,8 +79,8 @@ def getWebData(stockName, dataDates):
 
             # User pandas_reader.data.DataReader to load the desired data. As simple as that.
             try:
-            	#import pandas_datareader as web
-            	#df = web.get_data_yahoo('GOOG', start_date, end_date)﻿
+                #import pandas_datareader as web
+                #df = web.get_data_yahoo('GOOG', start_date, end_date)﻿
                 panel_data = web.DataReader(stockName, data_source, start_date, end_date)
                 panel_data.to_csv(filePath)
             except:
@@ -137,31 +135,31 @@ def getFundamentalData(stockName = "FRED/GDP"):
 ## writes every column in daily % change 
 ###################################################################################
 def readCSV(filePath, days = 0):
-	#load csv file 
-	df = pd.read_csv(filePath, parse_dates = True, index_col=0)
+    #load csv file
+    df = pd.read_csv(filePath, parse_dates = True, index_col=0)
 
-	#append other columns
-	df['200ma'] = df['Close'].rolling(window=200).mean()
-	df['100ma'] = df['Close'].rolling(window=100).mean()
-	df['50ma'] = df['Close'].rolling(window=50).mean()
-	df['10ma'] = df['Close'].rolling(window=10).mean()
+    #append other columns
+    df['200ma'] = df['Close'].rolling(window=200).mean()
+    df['100ma'] = df['Close'].rolling(window=100).mean()
+    df['50ma'] = df['Close'].rolling(window=50).mean()
+    df['10ma'] = df['Close'].rolling(window=10).mean()
 
-	if (logger.getEffectiveLevel() == logging.DEBUG):
-		#displaying 100ma vs Adj Close
-		axBarGraph(index = df.index, ax1Data = df['Adj Close'], \
-			ax2Data  = df['100ma'], barData = df['Volume'])
+    if (logger.getEffectiveLevel() == logging.DEBUG):
+        #displaying 100ma vs Adj Close
+        axBarGraph(index = df.index, ax1Data = df['Adj Close'], \
+            ax2Data  = df['100ma'], barData = df['Volume'])
 
-	if (logger.getEffectiveLevel() == logging.DEBUG):
-		candlestickGraph(df)
+    if (logger.getEffectiveLevel() == logging.DEBUG):
+        candlestickGraph(df)
 
-	#append other columns
-	if(days):
-		df = round(((df - df.shift(days))/df.shift(days) * 100),2)
+    #append other columns
+    if(days):
+        df = round(((df - df.shift(days))/df.shift(days) * 100),2)
 
-	#When we reset the index, the old index is added as a column, and a new sequential index is used
-	#inplace=True, modefy the current table do not return a new
-	df.reset_index(inplace=True)
-	return(df)
+    #When we reset the index, the old index is added as a column, and a new sequential index is used
+    #inplace=True, modefy the current table do not return a new
+    df.reset_index(inplace=True)
+    return(df)
 
 ###################################################################################
 ## combine CSV files into dataFrame
@@ -203,12 +201,13 @@ def combineCSV(CSVfiles, keys):
 ##  
 ###################################################################################
 def dataPipeline(dataDates, stockToPredict):
-    #if detasetfile already exist do not create new dataset
+    # if detaset file already exist do not create new dataset
     filePath = dataLoc + "dataSets"
-    if (path.exists(filePath)):
-        print ("opening file... ")
+    if path.exists(filePath):
+        print("opening file... ")
         stock_CSVData = openCSV(filePath)
-        logging.debug("stock_CSVData",stock_CSVData)
+        logging.debug("stock_CSVData", stock_CSVData)
+
     else:
         #Create/get sp500 name list
         sp500_list = getsp500()
@@ -220,7 +219,7 @@ def dataPipeline(dataDates, stockToPredict):
         #Store stock web address it in CSV files
         stockPaths = []
         for item in sp500_list:
-        	#gets the file path where the CSV file is stored
+            #gets the file path where the CSV file is stored
             stockPath = getWebData(item,dataDates)
             if (stockPath):
                 stockPaths.append(stockPath)
@@ -251,37 +250,35 @@ def dataPipeline(dataDates, stockToPredict):
     return stock_CSVData
 
 
-###################################################################################
-## selfRun
-## for testing or example purpose 
-###################################################################################
 if __name__ == "__main__":
-    import sys
+    """ for testing or example purpose 
+    """
+    import argparse
     # Instantiate the parser
     # logging.basicConfig(filename='log.log', level=logging.INFO)
     parser = argparse.ArgumentParser(description='Optional app description')
 
-    #Debug
+    # Debug
     parser.add_argument('-v', "--verbose", action='store_true',
                         help='Type -v to do debugging')
 
     args = parser.parse_args()
 
-    if(args.verbose):
+    if args.verbose:
         logger.setLevel(logging.DEBUG)
     '''
-    emaples
-    #logging.info('So should this')
-    #logging.warning('And this, too')
+    # logger examples
+    # logging.info('So should this')
+    # logging.warning('And this, too')
     '''
     #################################################################################
 
     stockToPredict = 'TSLA'
-    
     dataDates = []
     dataDates.append('2010-01-01')
     dataDates.append(datetime.now().date())
     
-    #from csv file with all the stocks from sp500
-    #dataPipeline returns a data set to train with 5 random stocks
+    # from csv file with all the stocks from sp500
+    # dataPipeline returns a data set to train with 5 random stocks
     df = dataPipeline(dataDates, stockToPredict)
+    print(df)
