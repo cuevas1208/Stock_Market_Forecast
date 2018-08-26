@@ -85,12 +85,12 @@ def getWebData(stockName, dataDates):
                 # df = web.get_data_yahoo('GOOG', start_date, end_date)﻿
                 panel_data = web.DataReader(stockName, data_source, start_date, end_date)
                 panel_data.to_csv(filePath)
-            except:
-                print(stockName, "had probles been downloaded")
+            except Exception as e:
+                print(stockName, 'error while loading \n', e)
                 if not (path.exists(filePath)):
-                    return (0)
+                    return 0
                
-    return (filePath)
+    return filePath
 
 
 def getFundamentalData(stock_name ="FRED/GDP"):
@@ -213,28 +213,26 @@ def dataPipeline(data_dates, stock_to_predict):
         logging.debug("stock_CSVData", stock_CSVData)
 
     else:
-        #Create/get sp500 name list
+        # Create/get sp500 name list
         sp500_list = getsp500()
 
         #get Fundamental data stocks that drive the market
         #petrolium price, usa dollar, gold, 
         #getFundamentalData()
 
-        #Store stock web address it in CSV files
+        # Store stock web address it in CSV files
         stockPaths = []
         for item in sp500_list:
-            #gets the file path where the CSV file is stored
+            # gets the file path where the CSV file is stored
             stockPath = getWebData(item, data_dates)
-            if (stockPath):
+            if stockPath:
                 stockPaths.append(stockPath)
             else:
-                #removes the first matching value
+                # removes the first matching value
                 sp500_list.remove(item)
 
-        #################################################
-        ##Loop to create dataframes
-        #################################################
-        #Read CSV files and append each other to one data 
+        # Loop to create a dataframe
+        # Read CSV files and append each other to one data
         stock_CSVData = {}
 
         for i, item in enumerate(stockPaths):
@@ -245,9 +243,8 @@ def dataPipeline(data_dates, stock_to_predict):
 
         hf.saveCSV(dataLoc + "dataSets", stock_CSVData)
 
-
-    #load your stock if it hasn't loaded   
-    if (not stock_to_predict in stock_CSVData):
+    # load your stock if it hasn't loaded
+    if not stock_to_predict in stock_CSVData:
         stPath = getWebData(stock_to_predict, data_dates)
         stock_CSVData.update({stock_to_predict: readCSV(stPath)})
 

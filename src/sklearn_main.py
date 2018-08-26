@@ -15,15 +15,16 @@ import logging
 from sklearn.externals import joblib
 import os
 
-from data_functions.data_Load import dataPipeline, combineCSV
+from data_functions.data_Load import dataPipeline, combineCSV, getsp500
 
 logger = logging.getLogger()
 
 PREDICTION_DAYS = 7
 DATA_SET_LEN = 10
 MODELS_PATH = '../models/'
+
 STOCK_TO_PREDICT = 'TSLA'
-ticker = STOCK_TO_PREDICT + '_High'
+LABEL_TO_PREDICT = '_High'
 
 # PERCENTAGE_THRESHOLD should change based on the volatility of the stock
 PERCENTAGE_THRESHOLD = 0.02  # 0.02 == 2 percentage
@@ -61,36 +62,37 @@ def detaCorrelation(df, stocksName):
     plt.show()
 
 
-def process_data_for_labels(ticker, df):
+def process_data_for_labels(ticker_feature, df):
     """ process_data_for_labels
     # input days to analyze data
     # it would output the percentage increase/decrease of the stock in PREDICTION_DAYS
     # by shifting the columns to PREDICTION_DAYS
 
-    :param ticker: string name of the ticker
+    :param ticker_feature: string name of the ticker
     :param df: dataset fragment
     :return: df with adjusted percentage change
     """
+    print('loading:', ticker_feature, df.shape)
     # delete all NAN array with rows deleted
-    df.dropna(subset=[ticker], inplace=True)
+    df.dropna(subset=[ticker_feature], inplace=True)
     logging.debug("df shape after eliminating NAN from labels", df.shape)
 
     # get future labels for classification
-    df['{}_labels'.format(ticker)] = \
-        (df[ticker].shift(-PREDICTION_DAYS) - df[ticker]) / df[ticker]
+    df['{}_labels'.format(ticker_feature)] = \
+        (df[ticker_feature].shift(-PREDICTION_DAYS) - df[ticker_feature]) / df[ticker_feature]
 
     # return a list of labels with no NAN
-    df.dropna(subset=['{}_labels'.format(ticker)], inplace=True)
+    df.dropna(subset=['{}_labels'.format(ticker_feature)], inplace=True)
     logging.debug("df shape after eliminating NAN from labels", df.shape)
 
-    logging.debug("labels with days difference", df['{}_labels'.format(ticker)])
+    logging.debug("labels with days difference", df['{}_labels'.format(ticker_feature)])
 
     # transform labels in to 1, 0 and -1 ==> buy_hold_sell
-    df['{}_labels'.format(ticker)] = list(map(set_buy_sell_hold, df['{}_labels'.format(ticker)]))
-    logging.debug("labels after the one_hot", df['{}_labels'.format(ticker)])
+    df['{}_labels'.format(ticker_feature)] = list(map(set_buy_sell_hold, df['{}_labels'.format(ticker_feature)]))
+    logging.debug("labels after the one_hot", df['{}_labels'.format(ticker_feature)])
 
     # visualize spread
-    values = df['{}_labels'.format(ticker)].values.tolist()
+    values = df['{}_labels'.format(ticker_feature)].values.tolist()
     str_values = [str(i) for i in values]
     print('Data spread:', Counter(str_values), "total labels: ", len(values))
 
@@ -112,114 +114,150 @@ def set_buy_sell_hold(*args):
     return 0
 
 
-def extract_features(ticker, df):
-    """ extract_features
-    """
+def extract_features_method_1(df):
+    # tickers are all the column_labels that would be for training excluding training_labels
     tickers = df.columns.values.tolist()
 
+    # pct_change() normalize the value to be percentage change
+    df_values = df[[ticker for ticker in tickers]].pct_change()
+
+    df_values.replace([np.inf, -np.inf], 0, inplace=True)
+    df_values.fillna(0, inplace=True)
+    print("x features shape:  ", df_values.shape)
+
+    x = df_values.values
+
+    return x, df
+
+
+def extract_features_method_2(df, ticker):
+
+    # calculates the medan of low
+    df['x_features'] = df[ticker + '_Low'] + df[ticker + '_High'] / 2
+
+    # normalize the value to be percent change
+    df['x_features'] = df['x_features'].pct_change()
+
     # handles invalid numbers
+    df.replace([np.inf, -np.inf], 0, inplace=True)
     df.fillna(0, inplace=True)
-    df = df.replace([np.inf, -np.inf], np.nan)
-    df.dropna(inplace=True)
 
-    # tickers == to all the column labels used for features excluding labels
-    # pct_change() normalize the value to be percentage change from yesterday
-    df_vals = df[[ticker for ticker in tickers]].pct_change()
-    df_vals = df_vals.replace([np.inf, -np.inf], 0)
-    df_vals.fillna(0, inplace=True)
-    print("x features shape:  ", df_vals.shape)
+    # load features
+    x = df['x_features'].values
+    for i in range(1, DATA_SET_LEN):
+        x = np.dstack((x, df['x_features'].shift(-i).values))
+    x = x[0].tolist()
+    df['training_features'] = x
 
-    x = df_vals.values
-    y = df['{}_labels'.format(ticker)].values
-
-    return x, y, df
+    return df
 
 
-def train(x, y):
+def get_training_dataset(ticker, df):
+
+    # x, _ = extract_features_method_1(df)
+    df = extract_features_method_2(df, ticker)
+
+    # get validation sample before shuffle
+    y = df[ticker + LABEL_TO_PREDICT + '_labels'].values
+    x = df['training_features'].tolist()
+    x = np.asarray(x)
+    dates = df['Date'].tolist()
+    valid_sample = {'x': x[-100:-80], 'y': y[-100:-80], 'dates': dates[-100:-80]}
+
+    # shuffles dataset
+    df = df.sample(frac=1).reset_index(drop=True)
+
+    # load dataset
+    y = df[ticker + LABEL_TO_PREDICT + '_labels'].values
+    x = df['training_features'].tolist()
+    x = np.asarray(x)
+    dates = df['Date'].tolist()
+
+    # clean data
+    mask = ~np.isnan(x).any(axis=1)
+    x = x[mask]; y = y[mask]
+    mask = np.isfinite(x).any(axis=1)
+    x = x[mask]; y = y[mask]
+
+    print('input training labels shape:', y.shape, ' and features shape:', x.shape)
+    return x, y, dates, valid_sample
+
+
+def train(x, y, dates, valid_sample, ticker='stock'):
     logging.debug("X sample: \ {} ".format(len(x.shape)))
     logging.debug("y sample: \ {} ".format(len(y.shape)))
 
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(x, y, test_size=0.25)
+    # random shuffle and split
+    test_size = int(len(y)*0.2)
+    x_train, x_test, y_train, y_test = x[test_size:], x[:test_size], y[test_size:], y[:test_size]
 
     # combine the predictions of several base estimators
     clf = VotingClassifier([('lsvc', svm.LinearSVC()),
                             ('knn', neighbors.KNeighborsClassifier()),
                             ('rfor', RandomForestClassifier())])
 
-    clf.fit(X_train, y_train)
+    clf.fit(x_train, y_train)
 
-    y_pred = clf.predict(X_test)
+    # test data prediction
     np.set_printoptions(precision=2)
-    print('0=>correct,   1,2=>error')
-    print(np.abs(np.around((y_pred - y_test), 2)))
-    confidence = clf.score(X_test, y_test)
+    confidence = clf.score(x_test, y_test)
     print('accuracy:', confidence)
 
     from visualization import matplot_graphs
-    matplot_graphs.plot_histogram(y_pred[-20:], y_test[-20:])
+    y_pred = clf.predict(valid_sample['x'])
+    matplot_graphs.plot_histogram(y_pred, valid_sample['y'], dates[-20:], ticker, str(confidence))
 
     return confidence, clf
 
 
-def forecast(tickle_name):
-    # get the last PREDICTION_DAYS
-
+def forecast(ticker, df):
+    # load dataset
+    x, y, dates, validation_sample = get_training_dataset(ticker, df)
 
     # load model
-    if os.path.exists(tickle_name):
-        clf = joblib.load('tickle_name.pkl')
-    else:
-        print('file does no exits')
+    if not os.path.exists(ticker):
+
+        # train model
+        confidence, clf = train(x, y, dates, validation_sample, ticker)
+
+        # save model
+        if not os.path.exists(MODELS_PATH):
+            os.makedirs(MODELS_PATH)
+        joblib.dump(clf, MODELS_PATH + ticker + '.pkl')
+
+    # last dataset sample
+    x = x[-1:]
+    clf = joblib.load(MODELS_PATH + ticker + '.pkl')
+
+    # get forecast
+    forecast_ = clf.predict(x)
+    print('\n', ticker, ': Based in the last', DATA_SET_LEN, 'market days, the forecast is ',
+          forecast_ * PERCENTAGE_THRESHOLD, '% in next', PREDICTION_DAYS, 'days\n')
 
 
-def method1(stockName, df_features):
-    x, y, df = extract_features(stockName, df_features)
-    confidence, clf = train(x, y)
+def get_dataframe(ticker):
+    # set training dates range
+    # Todo: dingily change the date based on ticker data
+    training_range_dates = ['2010-01-01', datetime.now().date()]
 
-    # save model
-    if not os.path.exists(MODELS_PATH):
-        os.makedirs(MODELS_PATH)
+    # load get STOCK_TO_PREDICT and 5 random stocks from sp500 to be used as indicators
+    df = dataPipeline(training_range_dates, ticker)
+    df_features, stocksName = combineCSV(df, df.keys())
 
-    joblib.dump(clf, MODELS_PATH + stockName + '.pkl')
+    if logger.getEffectiveLevel() == logging.DEBUG:
+        logging.debug("Loaded most resent sample: \ {} ".format(df_features.tail(2)))
+        df_features[ticker + LABEL_TO_PREDICT].plot()
+        plt.show()
 
+    # change values to percentage of change within the days intended to predict
+    df = process_data_for_labels(ticker + LABEL_TO_PREDICT, df_features)
 
-def method2(stockName, df):
-    # prepare label
-    y = df['{}_labels'.format(ticker)].values
+    # handle amy invalid numbers
+    df.fillna(0, inplace=True)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.dropna(inplace=True)
 
-    # ToDo: how to consider the relevant data to train on
-    # detaCorrelation(df, stocksName)
-    # do_ml(df[stockToPredict]['Close'], df_features)
-
-    # prepare X
-    df['x_features'] = df[STOCK_TO_PREDICT + '_Low'] + df[STOCK_TO_PREDICT + '_High'] / 2
-
-    # pct_change() normalize the value to be percent change from yesterday
-    df['x_features'] = df['x_features'].pct_change()
-
-    # creating features for prediction
-    x = df['x_features'].values
-    for i in range(1, DATA_SET_LEN):
-        x = np.dstack((x, df['x_features'].shift(-i).values))
-
-    print(x[0])
-    x = x[0]
-    mask = ~np.isnan(x).any(axis=1)
-
-    # clean dataset
-    x = x[mask]
-    y = y[mask]
-
-    logging.debug(x.shape)
-    logging.debug(y.shape)
-
-    confidence, clf = train(x, y)
-
-    # save model
-    if not os.path.exists(MODELS_PATH):
-        os.makedirs(MODELS_PATH)
-
-    joblib.dump(clf, MODELS_PATH + stockName + '.pkl')
+    return df
 
 
 if __name__ == "__main__":
@@ -234,28 +272,16 @@ if __name__ == "__main__":
     parser.add_argument('-v', "--verbose", action='store_true',
                         help='Type -v to do debugging')
     args = parser.parse_args()
+
+    # set debug mode
     if args.verbose: logger.setLevel(logging.DEBUG)
-    '''
-    emaples
-    #logging.info('So should this')
-    #logging.warning('And this, too')
-    '''
 
-    # set training dates range
-    training_range_dates = ['2010-01-01', datetime.now().date()]
+    # forecast chosen ticker
+    df = get_dataframe(STOCK_TO_PREDICT)
+    forecast(STOCK_TO_PREDICT, df)
 
-    # load get STOCK_TO_PREDICT and 5 random stocks from sp500 to be used as indicators
-    df = dataPipeline(training_range_dates, STOCK_TO_PREDICT)
-    df_features, stocksName = combineCSV(df, df.keys())
-
-    if logger.getEffectiveLevel() == logging.DEBUG:
-        logging.debug("Loaded most resent sample: \ {} ".format(df_features.tail(2)))
-        df_features[STOCK_TO_PREDICT + '_High'].plot()
-        plt.show()
-
-    # change values to percentage of change for the days intended to predict
-    df = process_data_for_labels(ticker, df_features)
-
-    # method1(ticker, df)
-    method2(ticker, df)
-    ###############################################################################
+    # forecast all sp500
+    sp500_list = getsp500()
+    for sp500_ticker in sp500_list:
+        df = get_dataframe(sp500_ticker)
+        forecast(sp500_ticker, df)
