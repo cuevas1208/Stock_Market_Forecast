@@ -27,7 +27,7 @@ After running the sklearn_main.py you should see the following graph:
 ![Results](./images/graph_sample.png)
     
 ##Reference 
-These links are a good way to learn about some of the decencies used in this proj
+These links are a good way to learn about some of the dependencies used in this proj
 * pandas https://pandas.pydata.org/pandas-docs/stable/whatsnew.html
 * pandas-datareader http://pandas-datareader.readthedocs.io/en/latest/remote_data.html#remote-data-quandlquandl
 
