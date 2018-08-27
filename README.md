@@ -2,11 +2,14 @@
 Using convolutional neural network to predict the stock market
 
 ##Overview
+Python script for the Stock Price Prediction. The code uses the [scikit-learn](https://github.com/scikit-learn/scikit-learn) 
+machine learning library to train a [support vector regression](https://en.wikipedia.org/wiki/Support_vector_machine) 
+on a stock price dataset from [Google Finance](https://en.wikipedia.org/wiki/Support_vector_machine) to estimate a 
+buy, hold and sell based on settings.
 
-This is the code for the Stock Price Prediction. The code uses the [scikit-learn](https://github.com/scikit-learn/scikit-learn) machine learning library to train a [support vector regression](https://en.wikipedia.org/wiki/Support_vector_machine) on a stock price dataset from [Google Finance](https://en.wikipedia.org/wiki/Support_vector_machine) to predict a future price.
-This porject is an attempt to predict the stock volatility using an Pandas to incorporate Google Finance Stock tools together to get data set. 
-In the data set I will explore the predictive power of different observation and normalization schemes.
-At the end I will compare the model performance with the benchmarks and discuss issues including applications at other frequencies, overfitting, and error statistics.
+This project is an attempt to predict the stock volatility using an python finance stock tools. 
+In the data set I will explore different observation and normalization schemes.
+At the end I will compare the model performance with the benchmarks and discuss issues.
 
 ##Dependencies
 * numpy (http://www.numpy.org/)
@@ -14,10 +17,15 @@ At the end I will compare the model performance with the benchmarks and discuss 
 * csv (https://pypi.python.org/pypi/csv)
 * keras (https://keras.io)
 * quandl (https://www.quandl.com/tools/python)
-##Demo Usage
 
+##Get started
 Once you have your dependencies installed via pip, run the demo script in terminal via
-
+    cd src
+    python sklearn_main.py
+    
+After running the sklearn_main.py you should see the following graph:
+![Results](./images/graph_sample.png)
+    
 ##Reference 
 These links are a good way to learn about some of the depencies used in this proj
 * pandas https://pandas.pydata.org/pandas-docs/stable/whatsnew.html

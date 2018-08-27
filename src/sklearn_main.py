@@ -141,9 +141,9 @@ def extract_features_method_2(df, ticker):
     df.replace([np.inf, -np.inf], 0, inplace=True)
     df.fillna(0, inplace=True)
 
-    # extract feature data, data has to be before the label date (shift by one at least)
-    x = df['x_features'].shift(1).values
-    for i in range(2, DATA_SET_LEN):
+    # extract past feature data including today's data if known
+    x = df['x_features'].shift(0).values
+    for i in range(1, DATA_SET_LEN):
         x = np.dstack((x, df['x_features'].shift(i).values))
     x = x[0].tolist()
     df['training_features'] = x
@@ -161,7 +161,8 @@ def get_training_dataset(ticker, df):
     x = df['training_features'].tolist()
     x = np.asarray(x)
     dates = df['Date'].tolist()
-    valid_sample = {'x': x[-120:-90], 'y': y[-120:-90], 'dates': dates[-120:-90]}
+    valid_sample = {'x': x[-120:-90], 'y': y[-120:-90], 'dates': dates[-120:-90],
+                    'p_dates': dates[-120+PREDICTION_DAYS:-90+PREDICTION_DAYS]}
 
     # shuffles dataset
     df = df.sample(frac=1).reset_index(drop=True)
@@ -204,7 +205,7 @@ def train(x, y, valid_sample, ticker='stock'):
 
     from visualization import matplot_graphs
     y_pred = clf.predict(valid_sample['x'])
-    matplot_graphs.plot_histogram(y_pred, valid_sample['y'], valid_sample['dates'], ticker, str(confidence))
+    matplot_graphs.plot_histogram(y_pred, valid_sample['y'], valid_sample['dates'], ticker, confidence, PREDICTION_DAYS)
 
     return confidence, clf
 
