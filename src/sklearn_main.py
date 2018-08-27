@@ -19,8 +19,8 @@ from data_functions.data_Load import dataPipeline, combineCSV, getsp500
 
 logger = logging.getLogger()
 
-PREDICTION_DAYS = 7
-DATA_SET_LEN = 10
+PREDICTION_DAYS = 4
+DATA_SET_LEN = 20
 MODELS_PATH = '../models/'
 
 STOCK_TO_PREDICT = 'TSLA'
@@ -84,7 +84,6 @@ def process_data_for_labels(ticker_feature, df):
     # return a list of labels with no NAN
     df.dropna(subset=['{}_labels'.format(ticker_feature)], inplace=True)
     logging.debug("df shape after eliminating NAN from labels", df.shape)
-
     logging.debug("labels with days difference", df['{}_labels'.format(ticker_feature)])
 
     # transform labels in to 1, 0 and -1 ==> buy_hold_sell
@@ -142,10 +141,10 @@ def extract_features_method_2(df, ticker):
     df.replace([np.inf, -np.inf], 0, inplace=True)
     df.fillna(0, inplace=True)
 
-    # load features
-    x = df['x_features'].values
-    for i in range(1, DATA_SET_LEN):
-        x = np.dstack((x, df['x_features'].shift(-i).values))
+    # extract feature data, data has to be before the label date (shift by one at least)
+    x = df['x_features'].shift(1).values
+    for i in range(2, DATA_SET_LEN):
+        x = np.dstack((x, df['x_features'].shift(i).values))
     x = x[0].tolist()
     df['training_features'] = x
 
@@ -162,7 +161,7 @@ def get_training_dataset(ticker, df):
     x = df['training_features'].tolist()
     x = np.asarray(x)
     dates = df['Date'].tolist()
-    valid_sample = {'x': x[-100:-80], 'y': y[-100:-80], 'dates': dates[-100:-80]}
+    valid_sample = {'x': x[-120:-90], 'y': y[-120:-90], 'dates': dates[-120:-90]}
 
     # shuffles dataset
     df = df.sample(frac=1).reset_index(drop=True)
@@ -183,7 +182,7 @@ def get_training_dataset(ticker, df):
     return x, y, dates, valid_sample
 
 
-def train(x, y, dates, valid_sample, ticker='stock'):
+def train(x, y, valid_sample, ticker='stock'):
     logging.debug("X sample: \ {} ".format(len(x.shape)))
     logging.debug("y sample: \ {} ".format(len(y.shape)))
 
@@ -205,7 +204,7 @@ def train(x, y, dates, valid_sample, ticker='stock'):
 
     from visualization import matplot_graphs
     y_pred = clf.predict(valid_sample['x'])
-    matplot_graphs.plot_histogram(y_pred, valid_sample['y'], dates[-20:], ticker, str(confidence))
+    matplot_graphs.plot_histogram(y_pred, valid_sample['y'], valid_sample['dates'], ticker, str(confidence))
 
     return confidence, clf
 
@@ -218,7 +217,7 @@ def forecast(ticker, df):
     if not os.path.exists(ticker):
 
         # train model
-        confidence, clf = train(x, y, dates, validation_sample, ticker)
+        confidence, clf = train(x, y, validation_sample, ticker)
 
         # save model
         if not os.path.exists(MODELS_PATH):
