@@ -4,62 +4,21 @@
 # to build this ml module
 # referene  https://pythonprogramming.net/machine-learning-stock-prices-python-programming-for-finance/
 ################################################################################
-import numpy as np
-from datetime import datetime
-import matplotlib.pyplot as plt
-from collections import Counter
-from sklearn import svm, cross_validation, neighbors
-from sklearn.ensemble import VotingClassifier, RandomForestClassifier
 import argparse
 import logging
-from sklearn.externals import joblib
 import os
+from collections import Counter
 
-from data_functions.data_Load import dataPipeline, combineCSV, getsp500
+import numpy as np
+from sklearn import svm, neighbors
+from sklearn.ensemble import VotingClassifier, RandomForestClassifier
+from sklearn.externals import joblib
+
+from src.conf import PREDICTION_DAYS, BATCH_LEN, MODELS_PATH, STOCK_TO_PREDICT, LABEL_TO_PREDICT, \
+    PERCENTAGE_THRESHOLD
+from src.data_functions.data_load import get_dataframe
 
 logger = logging.getLogger()
-
-PREDICTION_DAYS = 4
-DATA_SET_LEN = 20
-MODELS_PATH = '../models/'
-
-STOCK_TO_PREDICT = 'TSLA'
-LABEL_TO_PREDICT = '_High'
-
-# PERCENTAGE_THRESHOLD should change based on the volatility of the stock
-PERCENTAGE_THRESHOLD = 0.02  # 0.02 == 2 percentage
-
-
-def detaCorrelation(df, stocksName):
-    """
-    graphs data correlation
-    """
-    # before doing data correlation it would be good to prepare that data
-    # by taking the % differences of the stock market
-    df = process_data_for_labels(df)
-
-    df_corr = df.corr()
-    # print("correlation: ")
-    # print(df_corr)
-
-    data = df_corr.values
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    heatmap = ax.pcolor(data, cmap=plt.cm.RdYlGn)
-    fig.colorbar(heatmap)
-    ax.set_xticks(np.arange(data.shape[0]) + 0.5, minor=False)
-    ax.set_yticks(np.arange(data.shape[1]) + 0.5, minor=False)
-    ax.invert_yaxis()
-    ax.xaxis.tick_top()
-    column_labels = df_corr.columns
-    row_labels = df_corr.index
-
-    ax.set_xticklabels(column_labels)
-    ax.set_yticklabels(row_labels)
-    plt.xticks(rotation=90)
-    heatmap.set_clim(-1, 1)
-    plt.tight_layout()
-    plt.show()
 
 
 def process_data_for_labels(ticker_feature, df):
@@ -77,7 +36,7 @@ def process_data_for_labels(ticker_feature, df):
     df.dropna(subset=[ticker_feature], inplace=True)
     logging.debug("df shape after eliminating NAN from labels", df.shape)
 
-    # get future labels for classification
+    # get future labels for classification, shift data
     df['{}_labels'.format(ticker_feature)] = \
         (df[ticker_feature].shift(-PREDICTION_DAYS) - df[ticker_feature]) / df[ticker_feature]
 
@@ -94,6 +53,11 @@ def process_data_for_labels(ticker_feature, df):
     values = df['{}_labels'.format(ticker_feature)].values.tolist()
     str_values = [str(i) for i in values]
     print('Data spread:', Counter(str_values), "total labels: ", len(values))
+
+    # handle any invalid numbers
+    df.fillna(0, inplace=True)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.dropna(inplace=True)
 
     return df
 
@@ -130,20 +94,22 @@ def extract_features_method_1(df):
 
 
 def extract_features_method_2(df, ticker):
-
     # calculates the medan of low
-    df['x_features'] = df[ticker + '_Low'] + df[ticker + '_High'] / 2
+    df['x_features'] = df[ticker + '_Close']  # df[ticker + '_Low'] + df[ticker + '_High'] / 2
 
     # normalize the value to be percent change
     df['x_features'] = df['x_features'].pct_change()
+    print('average percentage change {} in the last 20 days {}\n\n'.format(np.abs(df['x_features']).mean(),
+                                                                           np.abs(df['x_features'][-20:]).mean()))
 
     # handles invalid numbers
     df.replace([np.inf, -np.inf], 0, inplace=True)
     df.fillna(0, inplace=True)
 
     # extract past feature data including today's data if known
+    # Todo: currently row goes from new to old
     x = df['x_features'].shift(0).values
-    for i in range(1, DATA_SET_LEN):
+    for i in range(1, BATCH_LEN):
         x = np.dstack((x, df['x_features'].shift(i).values))
     x = x[0].tolist()
     df['training_features'] = x
@@ -152,43 +118,56 @@ def extract_features_method_2(df, ticker):
 
 
 def get_training_dataset(ticker, df):
+    # change values to percentage of change within the days intended to predict
+    df = process_data_for_labels(ticker + LABEL_TO_PREDICT, df)
 
     # x, _ = extract_features_method_1(df)
     df = extract_features_method_2(df, ticker)
 
-    # get validation sample before shuffle
-    y = df[ticker + LABEL_TO_PREDICT + '_labels'].values
-    x = df['training_features'].tolist()
+    # take the last 7 days as validation samples before shuffle
+    sample_size = 15
+    valid = df[-sample_size:]
+    y = valid[ticker + LABEL_TO_PREDICT + '_labels'].values
+    x = valid['training_features'].tolist()
     x = np.asarray(x)
-    dates = df['Date'].tolist()
-    valid_sample = {'x': x[-120:-90], 'y': y[-120:-90], 'dates': dates[-120:-90],
-                    'p_dates': dates[-120+PREDICTION_DAYS:-90+PREDICTION_DAYS]}
+    dates = valid['Date'].tolist()
+    real_x = valid[ticker + LABEL_TO_PREDICT].values
+    valid_sample = {'x': x, 'y': y, 'dates': dates, 'p_dates': dates, "real_x": real_x}
 
     # shuffles dataset
-    df = df.sample(frac=1).reset_index(drop=True)
+    new_df = df[:-sample_size]
+    new_df = new_df.sample(frac=1).reset_index(drop=True)
+
+    # Todo: Balance data
+    y = new_df[ticker + LABEL_TO_PREDICT + '_labels'].values
+    values, count = np.unique(y, return_counts=True)
+    limit = np.min(count)
+    limit_value = values[np.argmin(count)]
 
     # load dataset
-    y = df[ticker + LABEL_TO_PREDICT + '_labels'].values
-    x = df['training_features'].tolist()
+    y = new_df[ticker + LABEL_TO_PREDICT + '_labels'].values
+    x = new_df['training_features'].tolist()
     x = np.asarray(x)
-    dates = df['Date'].tolist()
+    dates = new_df['Date'].tolist()
 
     # clean data
     mask = ~np.isnan(x).any(axis=1)
-    x = x[mask]; y = y[mask]
+    x = x[mask];
+    y = y[mask]
     mask = np.isfinite(x).any(axis=1)
-    x = x[mask]; y = y[mask]
+    x = x[mask];
+    y = y[mask]
 
     print('input training labels shape:', y.shape, ' and features shape:', x.shape)
     return x, y, dates, valid_sample
 
 
-def train(x, y, valid_sample, ticker='stock'):
+def train(x, y):
     logging.debug("X sample: \ {} ".format(len(x.shape)))
     logging.debug("y sample: \ {} ".format(len(y.shape)))
 
     # random shuffle and split
-    test_size = int(len(y)*0.2)
+    test_size = int(len(y) * 0.2)
     x_train, x_test, y_train, y_test = x[test_size:], x[:test_size], y[test_size:], y[:test_size]
 
     # combine the predictions of several base estimators
@@ -202,28 +181,28 @@ def train(x, y, valid_sample, ticker='stock'):
     np.set_printoptions(precision=2)
     confidence = clf.score(x_test, y_test)
     print('accuracy:', confidence)
-
-    from visualization import matplot_graphs
-    y_pred = clf.predict(valid_sample['x'])
-    matplot_graphs.plot_histogram(y_pred, valid_sample['y'], valid_sample['dates'], ticker, confidence, PREDICTION_DAYS)
-
     return confidence, clf
 
 
 def forecast(ticker, df):
     # load dataset
-    x, y, dates, validation_sample = get_training_dataset(ticker, df)
+    x, y, dates, valid_set = get_training_dataset(ticker, df)
 
     # load model
     if not os.path.exists(ticker):
 
         # train model
-        confidence, clf = train(x, y, validation_sample, ticker)
+        confidence, clf = train(x, y)
 
         # save model
         if not os.path.exists(MODELS_PATH):
             os.makedirs(MODELS_PATH)
         joblib.dump(clf, MODELS_PATH + ticker + '.pkl')
+
+    # run valid_set
+    from src.visualization import matplot_graphs
+    valid_set['y_pred'] = clf.predict(valid_set['x'])
+    matplot_graphs.plot_histogram(valid_set, ticker, confidence, PREDICTION_DAYS)
 
     # last dataset sample
     x = x[-1:]
@@ -231,37 +210,13 @@ def forecast(ticker, df):
 
     # get forecast
     forecast_ = clf.predict(x)
-    print('\n', ticker, ': Based in the last', DATA_SET_LEN, 'market days, the forecast is ',
+    print('\n', ticker, ': Based in the last', BATCH_LEN, 'market days, the forecast is ',
           forecast_ * PERCENTAGE_THRESHOLD, '% in next', PREDICTION_DAYS, 'days\n')
-
-
-def get_dataframe(ticker):
-    # set training dates range
-    # Todo: dingily change the date based on ticker data
-    training_range_dates = ['2010-01-01', datetime.now().date()]
-
-    # load get STOCK_TO_PREDICT and 5 random stocks from sp500 to be used as indicators
-    df = dataPipeline(training_range_dates, ticker)
-    df_features, stocksName = combineCSV(df, df.keys())
-
-    if logger.getEffectiveLevel() == logging.DEBUG:
-        logging.debug("Loaded most resent sample: \ {} ".format(df_features.tail(2)))
-        df_features[ticker + LABEL_TO_PREDICT].plot()
-        plt.show()
-
-    # change values to percentage of change within the days intended to predict
-    df = process_data_for_labels(ticker + LABEL_TO_PREDICT, df_features)
-
-    # handle amy invalid numbers
-    df.fillna(0, inplace=True)
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df.dropna(inplace=True)
-
-    return df
 
 
 if __name__ == "__main__":
     import warnings, sys
+
     if not sys.warnoptions:
         warnings.simplefilter("ignore")
 
@@ -269,8 +224,7 @@ if __name__ == "__main__":
     # logging.basicConfig(filename='log.log', level=logging.INFO)
     parser = argparse.ArgumentParser(description='Optional app description')
     # run -v for debug mode
-    parser.add_argument('-v', "--verbose", action='store_true',
-                        help='Type -v to do debugging')
+    parser.add_argument('-v', "--verbose", action='store_true', help='Type -v to do debugging')
     args = parser.parse_args()
 
     # set debug mode
@@ -281,7 +235,7 @@ if __name__ == "__main__":
     forecast(STOCK_TO_PREDICT, df)
 
     # forecast all sp500
-    sp500_list = getsp500()
-    for sp500_ticker in sp500_list:
-        df = get_dataframe(sp500_ticker)
-        forecast(sp500_ticker, df)
+    # sp500_list = getsp500()
+    # for sp500_ticker in sp500_list:
+    #     df = get_dataframe(sp500_ticker)
+    #     forecast(sp500_ticker, df)

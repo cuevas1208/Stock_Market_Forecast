@@ -8,10 +8,11 @@
 # Tools learned in Udacity CarND program were used to identify lane lines on the road.
 #######################################################################################
 import numpy as np
-from keras_model import modelClass
+from .keras_model import modelClass
 import datetime
-from data_functions import data_Load as load_d
-from data_functions import data_Prepare as pre_d
+from src.data_functions import data_Load as load_d
+from src.data_functions import data_Prepare as pre_d
+from src.conf import START_TIME
 
 
 def genImage(limit, batch, x_data, y_data):
@@ -25,7 +26,7 @@ def genImage(limit, batch, x_data, y_data):
 if __name__ == '__main__':
     # load data
     dataDates = list()
-    dataDates.append('2010-01-01')
+    dataDates.append(START_TIME)
     dataDates.append(datetime.now().date())
 
     # load tick data from the web

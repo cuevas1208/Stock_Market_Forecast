@@ -1,3 +1,3 @@
-from . import data_Load
-from . import data_Prepare
-from . import prepareCNNData
+from . import data_load
+from . import data_prepare
+from . import prepare_CNNData

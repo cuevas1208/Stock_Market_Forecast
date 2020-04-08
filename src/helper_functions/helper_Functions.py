@@ -74,8 +74,6 @@ def persentage(now, before):
 
 def openCSV(filePath):
     dist_pickle = pickle.load(open(filePath, "rb"))
-    # import panda as pd
-    # pd.read_pickle('foo.pkl')
     return dist_pickle["items"]
 
 

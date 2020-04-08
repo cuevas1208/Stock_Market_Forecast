@@ -1,8 +1,10 @@
-# data_Load.py
+# data_load.py
 # loads stock values from Google
 # tail(last item) = most resent date
 # head(first item) = oldest date
 ################################################################################
+import os
+
 import pandas as pd
 import datetime as dt
 import random
@@ -11,39 +13,71 @@ from datetime import datetime, timedelta
 from os import path
 import logging
 
+from matplotlib import pyplot as plt
+
+from src.conf import START_TIME, STOCK_TO_PREDICT, DATA_LOC, FULL_DATA_PKL, LABEL_TO_PREDICT
 # plt.switch_backend('TkAgg')
-logger = logging.getLogger()
+# from src.sklearn_main import logger
+# logger = logging.getLogger()
 
 # import local packages
-from helper_functions import visualize as vis
-from helper_functions import helper_Functions as hf
+from src.helper_functions import visualize as vis
+from src.helper_functions import helper_Functions as hf
 
 # using a seed to control training data
 random.seed(1)
-dataLoc = "../data/"
 
 
-# time after algorithm can loads new data in hours
-time_treshold = 12
+def get_dataframe(ticker):
+    """
+    :param ticker: string
+    :return: Returns a dataframe with all stocks data from the spy500
+    """
+    if os.path.isfile(FULL_DATA_PKL):
+
+        # update file after 3pm pacific time
+        fileDate = datetime.fromtimestamp(path.getmtime(FULL_DATA_PKL))
+        todayDate = datetime.now()
+        if (todayDate.hour < 13 and fileDate.date() >= todayDate.date() - timedelta(days=1)) or \
+                (fileDate.hour >= 13 and fileDate.date() == todayDate.date()):
+            df_features = pd.read_pickle(FULL_DATA_PKL)
+            if ticker+'_Close' in df_features.columns:
+                return df_features
+
+    # set training dates range
+    training_range_dates = [START_TIME, datetime.now().date()]
+
+    # loads all the in to dataframe along with their moving average in to a dictionary of stocks
+    df = dataPipeline(training_range_dates, ticker)
+
+    # combines all stocks in to one dataframe
+    df_features, _ = combineCSV(df, df.keys())
+    df_features.to_pickle(FULL_DATA_PKL)
+
+    # if logger.getEffectiveLevel() == logging.DEBUG:
+    #     logging.debug("Loaded most resent sample: \ {} ".format(df_features.tail(2)))
+    #     df_features[ticker + LABEL_TO_PREDICT].plot()
+    #     plt.show()
+
+    return df_features
 
 
 def getsp500():
-    """
-    list all sp500
+    """ list all sp500
     return a list a list from sp500
     checks to see if list has been exists if not it would be created
     """
-    file_path = "../data/" + "sp500_list" + '.csv'
+    file_path = DATA_LOC + "sp500_list" + '.csv'
     if not (path.exists(file_path)):
         df = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
         df.columns = df.ix[0]
         df.drop(df.index[0], inplace=True)
-        df.to_csv(file_path)
+        df['Ticker symbol'].to_csv(file_path)
     else:
         # load list from CSV file
         # https://stackoverflow.com/questions/19699367/unicodedecodeerror-utf-8-codec-cant-decode-byte
         df = pd.read_csv(file_path, encoding = "ISO-8859-1")
-    
+
     return df['Ticker symbol'].tolist()
 
 
@@ -57,38 +91,33 @@ def getWebData(stockName, dataDates):
     """
 
     # refresh files only if they haven't done within the day
-    filePath = "../data/" + stockName + '.csv'
-    
-    # refresh data ones a day
+    filePath = DATA_LOC + stockName + '.csv'
     todayDate = dataDates[1]
-
-    # if file exist, get files modification data. Else stamp old date
     if path.exists(filePath):
-        fileDate = datetime.fromtimestamp(path.getmtime(filePath)).date()
-    else:
-        fileDate = datetime.now().date() - timedelta(days=1)
-    
-    if todayDate > fileDate:
+        fileDate = datetime.fromtimestamp(path.getmtime(filePath))
         now = dt.datetime.now()
-        if now.hour > 12:
+
+        # if file is from today after 1pm pacific time
+        if (now.date() == fileDate.date()) and (fileDate.hour >= 13):
+            return filePath
         
-            # Define which on-line source one should use
-            data_source = 'yahoo'
+    # Define which on-line source one should use
+    data_source = 'yahoo'
 
-            # We would like all available data from dataDates[0] until dataDates[1]
-            start_date = dataDates[0]
-            end_date = todayDate
+    # We would like all available data from dataDates[0] until dataDates[1]
+    start_date = dataDates[0]
+    end_date = todayDate
 
-            # User pandas_reader.data.DataReader to load the desired data. As simple as that.
-            try:
-                # import pandas_datareader as web
-                # df = web.get_data_yahoo('GOOG', start_date, end_date)﻿
-                panel_data = web.DataReader(stockName, data_source, start_date, end_date)
-                panel_data.to_csv(filePath)
-            except Exception as e:
-                print(stockName, 'error while loading \n', e)
-                if not (path.exists(filePath)):
-                    return 0
+    # User pandas_reader.data.DataReader to load the desired data. As simple as that.
+    try:
+        # import pandas_datareader as web
+        # df = web.get_data_yahoo('GOOG', start_date, end_date)﻿
+        panel_data = web.DataReader(stockName, data_source, start_date, end_date)
+        panel_data.to_csv(filePath)
+    except Exception as e:
+        print(stockName, 'error while loading \n', e)
+        if not (path.exists(filePath)):
+            return 0
                
     return filePath
 
@@ -105,13 +134,13 @@ def getFundamentalData(stock_name ="FRED/GDP"):
 
     # refresh files only if they haven't done within the day
     fileName = stock_name.replace("/", "_")
-    filePath = "../data/" + fileName + '.csv'
+    filePath = DATA_LOC + fileName + '.csv'
 
     # refresh data ones a day
     todayDate = datetime.now().date() 
 
     # if file exist, get files Data. Else stamp old date
-    if (path.exists(filePath)):
+    if path.exists(filePath):
         fileDate = datetime.fromtimestamp(path.getctime(filePath)).date()
     else:
         fileDate = datetime.now().date() - timedelta(days=1)
@@ -119,7 +148,7 @@ def getFundamentalData(stock_name ="FRED/GDP"):
     if todayDate > fileDate:
 
         # We would like all available data from 01/01/2000 until 12/31/2016.
-        start_date = '2010-01-01'
+        start_date = START_TIME
         end_date = todayDate
 
         import quandl
@@ -135,26 +164,26 @@ def getFundamentalData(stock_name ="FRED/GDP"):
 
 
 def readCSV(filePath, days = 0):
-    """
-    reads CSV file into dataFrame
+    """ reads CSV file into dataFrame
     writes every column in daily % change
     """
-    #load csv file
+
+    # load csv file
     df = pd.read_csv(filePath, parse_dates = True, index_col=0)
 
-    #append other columns
+    # append other columns
     df['200ma'] = df['Close'].rolling(window=200).mean()
     df['100ma'] = df['Close'].rolling(window=100).mean()
     df['50ma'] = df['Close'].rolling(window=50).mean()
     df['10ma'] = df['Close'].rolling(window=10).mean()
 
-    if (logger.getEffectiveLevel() == logging.DEBUG):
-        #displaying 100ma vs Adj Close
-        vis.axBarGraph(index = df.index, ax1Data = df['Adj Close'], \
-            ax2Data  = df['100ma'], barData = df['Volume'])
+    # if (logger.getEffectiveLevel() == logging.DEBUG):
+    #     #displaying 100ma vs Adj Close
+    #     vis.axBarGraph(index = df.index, ax1Data = df['Adj Close'], \
+    #         ax2Data  = df['100ma'], barData = df['Volume'])
 
-    if (logger.getEffectiveLevel() == logging.DEBUG):
-        vis.candlestickGraph(df)
+    # if (logger.getEffectiveLevel() == logging.DEBUG):
+    #     vis.candlestickGraph(df)
 
     # append other columns
     if days:
@@ -166,14 +195,12 @@ def readCSV(filePath, days = 0):
     return(df)
 
 
-def combineCSV(CSVfiles, keys):
-    """
-    combine CSV files into dataFrame
+def combineCSV(CSVfiles, keys, main_df = pd.DataFrame()):
+    """ combine CSV files into one dataFrame
+        if maid_df is provided, keys would be appended it
     """
 
-    main_df = pd.DataFrame()
-   
-    for key in (keys):
+    for key in keys:
         
         df = CSVfiles[key]  
         df.set_index('Date', inplace=True)
@@ -199,30 +226,26 @@ def combineCSV(CSVfiles, keys):
 
 
 def dataPipeline(data_dates, stock_to_predict):
+    """ dataPipeline
+    creates a data set, if you have issues loading dataset I would recommend
+    deleting previews data sets pandas_dataReader verision may have a conflict
+    :return a dictionary of all datasets from spy, each row is a dataframe of a dataset
     """
-    dataPipeline
-    creates a data set, if this is your first time running this code, I would recommend
-    delating previews data sets or you may have issues with pickle due to the
-    dispcrepanci in pndas_dataReader verison.
-    """
+
     # if detaset file already exist do not create new dataset
-    filePath = dataLoc + "dataSets"
-    if path.exists(filePath):
+    filePath = DATA_LOC + "dataSets"
+    if False: # path.exists(filePath):
         print("opening file... ")
         stock_CSVData = hf.openCSV(filePath)
         logging.debug("stock_CSVData", stock_CSVData)
-
     else:
         # Create/get sp500 name list
         sp500_list = getsp500()
 
-        #get Fundamental data stocks that drive the market
-        #petrolium price, usa dollar, gold, 
-        #getFundamentalData()
-
         # Store stock web address it in CSV files
         stockPaths = []
         for item in sp500_list:
+
             # gets the file path where the CSV file is stored
             stockPath = getWebData(item, data_dates)
             if stockPath:
@@ -231,8 +254,7 @@ def dataPipeline(data_dates, stock_to_predict):
                 # removes the first matching value
                 sp500_list.remove(item)
 
-        # Loop to create a dataframe
-        # Read CSV files and append each other to one data
+        # Read CSV files and append each other to one dataframe
         stock_CSVData = {}
 
         for i, item in enumerate(stockPaths):
@@ -241,7 +263,7 @@ def dataPipeline(data_dates, stock_to_predict):
             else:
                 stock_CSVData.update({sp500_list[i]: readCSV(item)})
 
-        hf.saveCSV(dataLoc + "dataSets", stock_CSVData)
+        hf.saveCSV(DATA_LOC + "dataSets", stock_CSVData)
 
     # load your stock if it hasn't loaded
     if not stock_to_predict in stock_CSVData:
@@ -265,8 +287,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.verbose:
-        logger.setLevel(logging.DEBUG)
+    # if args.verbose:
+    #     logger.setLevel(logging.DEBUG)
     '''
     # logger examples
     # logging.info('So should this')
@@ -274,12 +296,13 @@ if __name__ == "__main__":
     '''
     #################################################################################
 
-    stockToPredict = 'TSLA'
+    stockToPredict = STOCK_TO_PREDICT
     dataDates = []
-    dataDates.append('2010-01-01')
+    dataDates.append(START_TIME)
     dataDates.append(datetime.now().date())
     
     # from csv file with all the stocks from sp500
     # dataPipeline returns a data set to train with 5 random stocks
     df = dataPipeline(dataDates, stockToPredict)
     print(df)
+
