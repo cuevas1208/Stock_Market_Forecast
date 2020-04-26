@@ -1,7 +1,10 @@
 # constants
-DATA_LOC = "../data/"
-MODELS_PATH = '../models/'
+DATA_LOC = "data/"
+MODELS_PATH = 'models/'
 FULL_DATA_PKL = DATA_LOC+ "full_dataframe.pkl"
+STOCK_INDEX_LOC = DATA_LOC + "_sp500_list" + '.csv'
+BENCHMARK_PKL = DATA_LOC + 'pre_processed/benchmark.pkl'
+CORR_ANALYSIS_PKL = DATA_LOC + 'pre_processed/correlation_analysis.pkl'
 
 # it's good to include 2000, 2008 crash in data traing
 START_TIME = '1998-01-01'
@@ -22,6 +25,15 @@ PERCENTAGE_THRESHOLD = 0.01
 STOCKS_TO_WATCH = [
     'QQQ',  # tech
     'SPY',  # top500
-    'IWM'   # small cap, russell 200
-    # 'SOX',  # semiconductor
+    'IWM',  # small cap, russell 200
+    'DJT',  # transport
+    'SMH',  # semiconductor
+    'FAS',  # finance
+    'SPXS', 'TZA', 'SOXS',  # bear market index
+
+    # stock on the move cruse
+    'CCL', 'NCLH', 'SIX', 'LRN', 'ERI', 'RCL',
+
+    # real state
+    'MFA', 'RWT', 'AIM'
 ]

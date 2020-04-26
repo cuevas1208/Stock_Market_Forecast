@@ -41,7 +41,7 @@ def plot_stock(name, confidence, dataset, buy_sale = []):
     else:
         if confidence > 0:
             states_buy, states_sell = buy_sale
-        if confidence < 0:
+        elif confidence < 0:
             states_sell, states_buy = buy_sale
 
     plt.title(name + ' - ' + str(confidence))

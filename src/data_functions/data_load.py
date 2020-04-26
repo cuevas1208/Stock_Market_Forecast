@@ -12,10 +12,11 @@ import pandas_datareader.data as web
 from datetime import datetime, timedelta
 from os import path
 import logging
+from tqdm import tqdm
 
 from matplotlib import pyplot as plt
 
-from src.conf import START_TIME, STOCK_TO_PREDICT, DATA_LOC, FULL_DATA_PKL, LABEL_TO_PREDICT
+from src.conf import START_TIME, STOCK_TO_PREDICT, DATA_LOC, FULL_DATA_PKL, STOCK_INDEX_LOC
 # plt.switch_backend('TkAgg')
 # from src.sklearn_main import logger
 # logger = logging.getLogger()
@@ -28,11 +29,13 @@ from src.helper_functions import helper_Functions as hf
 random.seed(1)
 
 
-def get_dataframe(ticker):
+def get_dataframe(ticker='TSLA'):
     """
     :param ticker: string
     :return: Returns a dataframe with all stocks data from the spy500
     """
+    # return pd.read_pickle(FULL_DATA_PKL)
+    # if os.path.isfile(False): # forces to load dataset
     if os.path.isfile(FULL_DATA_PKL):
 
         # update file after 3pm pacific time
@@ -41,7 +44,7 @@ def get_dataframe(ticker):
         if (todayDate.hour < 13 and fileDate.date() >= todayDate.date() - timedelta(days=1)) or \
                 (fileDate.hour >= 13 and fileDate.date() == todayDate.date()):
             df_features = pd.read_pickle(FULL_DATA_PKL)
-            if ticker+'_Close' in df_features.columns:
+            if ticker + '_Close' in df_features.columns or ticker == None:
                 return df_features
 
     # set training dates range
@@ -67,16 +70,15 @@ def getsp500():
     return a list a list from sp500
     checks to see if list has been exists if not it would be created
     """
-    file_path = DATA_LOC + "sp500_list" + '.csv'
-    if not (path.exists(file_path)):
+    if not (path.exists(STOCK_INDEX_LOC)):
         df = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
         df.columns = df.ix[0]
         df.drop(df.index[0], inplace=True)
-        df['Ticker symbol'].to_csv(file_path)
+        df['Ticker symbol'].to_csv(STOCK_INDEX_LOC, index=False)
     else:
         # load list from CSV file
         # https://stackoverflow.com/questions/19699367/unicodedecodeerror-utf-8-codec-cant-decode-byte
-        df = pd.read_csv(file_path, encoding = "ISO-8859-1")
+        df = pd.read_csv(STOCK_INDEX_LOC, encoding="ISO-8859-1")
 
     return df['Ticker symbol'].tolist()
 
@@ -90,6 +92,8 @@ def getWebData(stockName, dataDates):
     Retunr: the file path where the CSV file is stored
     """
 
+    if stockName == None:
+        return 0
     # refresh files only if they haven't done within the day
     filePath = DATA_LOC + stockName + '.csv'
     todayDate = dataDates[1]
@@ -100,7 +104,7 @@ def getWebData(stockName, dataDates):
         # if file is from today after 1pm pacific time
         if (now.date() == fileDate.date()) and (fileDate.hour >= 13):
             return filePath
-        
+
     # Define which on-line source one should use
     data_source = 'yahoo'
 
@@ -118,11 +122,11 @@ def getWebData(stockName, dataDates):
         print(stockName, 'error while loading \n', e)
         if not (path.exists(filePath)):
             return 0
-               
+
     return filePath
 
 
-def getFundamentalData(stock_name ="FRED/GDP"):
+def getFundamentalData(stock_name="FRED/GDP"):
     """
     # Dowloads data and save it as CSV
     # to get fundamentals you would have to pay
@@ -137,14 +141,14 @@ def getFundamentalData(stock_name ="FRED/GDP"):
     filePath = DATA_LOC + fileName + '.csv'
 
     # refresh data ones a day
-    todayDate = datetime.now().date() 
+    todayDate = datetime.now().date()
 
     # if file exist, get files Data. Else stamp old date
     if path.exists(filePath):
         fileDate = datetime.fromtimestamp(path.getctime(filePath)).date()
     else:
         fileDate = datetime.now().date() - timedelta(days=1)
-        
+
     if todayDate > fileDate:
 
         # We would like all available data from 01/01/2000 until 12/31/2016.
@@ -153,29 +157,29 @@ def getFundamentalData(stock_name ="FRED/GDP"):
 
         import quandl
         # User pandas_reader.data.DataReader to load the desired data. As simple as that.
-        panel_data = quandl.get(stock_name, start_date="2001-12-31", end_date = todayDate)
+        panel_data = quandl.get(stock_name, start_date="2001-12-31", end_date=todayDate)
 
         panel_data.to_csv(filePath)
 
     else:
         print("file is updated")
-               
+
     return filePath
 
 
-def readCSV(filePath, days = 0):
+def readCSV(filePath, days=0):
     """ reads CSV file into dataFrame
     writes every column in daily % change
     """
 
     # load csv file
-    df = pd.read_csv(filePath, parse_dates = True, index_col=0)
+    df = pd.read_csv(filePath, parse_dates=True, index_col=0)
 
     # append other columns
     df['200ma'] = df['Close'].rolling(window=200).mean()
     df['100ma'] = df['Close'].rolling(window=100).mean()
     df['50ma'] = df['Close'].rolling(window=50).mean()
-    df['10ma'] = df['Close'].rolling(window=10).mean()
+    df['20ma'] = df['Close'].rolling(window=20).mean()
 
     # if (logger.getEffectiveLevel() == logging.DEBUG):
     #     #displaying 100ma vs Adj Close
@@ -187,24 +191,24 @@ def readCSV(filePath, days = 0):
 
     # append other columns
     if days:
-        df = round(((df - df.shift(days))/df.shift(days) * 100),2)
+        df = round(((df - df.shift(days)) / df.shift(days) * 100), 2)
 
     # When we reset the index, the old index is added as a column, and a new sequential index is used
     # inplace=True, modefy the current table do not return a new
     df.reset_index(inplace=True)
-    return(df)
+    return (df)
 
 
-def combineCSV(CSVfiles, keys, main_df = pd.DataFrame()):
+def combineCSV(CSVfiles, keys, main_df=pd.DataFrame()):
     """ combine CSV files into one dataFrame
         if maid_df is provided, keys would be appended it
     """
 
     for key in keys:
-        
-        df = CSVfiles[key]  
+
+        df = CSVfiles[key]
         df.set_index('Date', inplace=True)
-        
+
         df.drop(['Volume'], 1, inplace=True)
         df = df.add_prefix(key + "_")
 
@@ -212,7 +216,7 @@ def combineCSV(CSVfiles, keys, main_df = pd.DataFrame()):
             main_df = df
         else:
             main_df = main_df.join(df, how='outer')
-            
+
     # Drop the rows where all of the elements are nan
     # main_df = main_df.dropna(axis=0, how='any')
 
@@ -220,7 +224,7 @@ def combineCSV(CSVfiles, keys, main_df = pd.DataFrame()):
     main_df.reset_index(inplace=True)
 
     # convert date format to Month and day
-    main_df['Date'] = main_df['Date'].map(lambda x: (100 * x.month + x.day)/100)
+    main_df['Date'] = main_df['Date'].map(lambda x: (100 * x.month + x.day) / 100)
 
     return main_df, keys
 
@@ -234,7 +238,7 @@ def dataPipeline(data_dates, stock_to_predict):
 
     # if detaset file already exist do not create new dataset
     filePath = DATA_LOC + "dataSets"
-    if False: # path.exists(filePath):
+    if False:  # path.exists(filePath):
         print("opening file... ")
         stock_CSVData = hf.openCSV(filePath)
         logging.debug("stock_CSVData", stock_CSVData)
@@ -244,7 +248,8 @@ def dataPipeline(data_dates, stock_to_predict):
 
         # Store stock web address it in CSV files
         stockPaths = []
-        for item in sp500_list:
+        print('loading data from the web ... ')
+        for item in tqdm(sp500_list):
 
             # gets the file path where the CSV file is stored
             stockPath = getWebData(item, data_dates)
@@ -255,6 +260,8 @@ def dataPipeline(data_dates, stock_to_predict):
                 sp500_list.remove(item)
 
         # Read CSV files and append each other to one dataframe
+        tmp = pd.DataFrame(sp500_list, columns=['Ticker symbol'])
+        tmp['Ticker symbol'].to_csv(STOCK_INDEX_LOC, index=False)
         stock_CSVData = {}
 
         for i, item in enumerate(stockPaths):
@@ -268,7 +275,8 @@ def dataPipeline(data_dates, stock_to_predict):
     # load your stock if it hasn't loaded
     if not stock_to_predict in stock_CSVData:
         stPath = getWebData(stock_to_predict, data_dates)
-        stock_CSVData.update({stock_to_predict: readCSV(stPath)})
+        if os.path.isfile(stPath):
+            stock_CSVData.update({stock_to_predict: readCSV(stPath)})
 
     return stock_CSVData
 
@@ -277,6 +285,7 @@ if __name__ == "__main__":
     """ for testing or example purpose 
     """
     import argparse
+
     # Instantiate the parser
     # logging.basicConfig(filename='log.log', level=logging.INFO)
     parser = argparse.ArgumentParser(description='Optional app description')
@@ -300,9 +309,8 @@ if __name__ == "__main__":
     dataDates = []
     dataDates.append(START_TIME)
     dataDates.append(datetime.now().date())
-    
+
     # from csv file with all the stocks from sp500
     # dataPipeline returns a data set to train with 5 random stocks
     df = dataPipeline(dataDates, stockToPredict)
     print(df)
-

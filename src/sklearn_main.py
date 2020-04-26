@@ -9,11 +9,13 @@ import logging
 import os
 from collections import Counter
 
+import pandas as pd
 import numpy as np
 from sklearn import svm, neighbors
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier
 from sklearn.externals import joblib
 
+from src.correlation_test import get_correlation
 from src.conf import PREDICTION_DAYS, BATCH_LEN, MODELS_PATH, STOCK_TO_PREDICT, LABEL_TO_PREDICT, \
     PERCENTAGE_THRESHOLD
 from src.data_functions.data_load import get_dataframe
@@ -94,25 +96,39 @@ def extract_features_method_1(df):
 
 
 def extract_features_method_2(df, ticker):
+
+    # get correlation stock
+    correlation_stock = get_correlation(df, ticker + LABEL_TO_PREDICT, top_samples=1, set_len=12).index
+
+    def shift_data(corr, pct=False):
+        if pct:
+            df[corr] = df[corr].pct_change()
+        x = df[corr].shift(0).values
+        for i in range(1, BATCH_LEN):
+            x = np.dstack((x, df[corr].shift(i).values))
+        return x
+
     # calculates the medan of low
-    df['x_features'] = df[ticker + '_Close']  # df[ticker + '_Low'] + df[ticker + '_High'] / 2
+    df['x_features'] = df[ticker + LABEL_TO_PREDICT]  # df[ticker + '_Low'] + df[ticker + '_High'] / 2
 
     # normalize the value to be percent change
     df['x_features'] = df['x_features'].pct_change()
     print('average percentage change {} in the last 20 days {}\n\n'.format(np.abs(df['x_features']).mean(),
                                                                            np.abs(df['x_features'][-20:]).mean()))
 
-    # handles invalid numbers
-    df.replace([np.inf, -np.inf], 0, inplace=True)
-    df.fillna(0, inplace=True)
-
     # extract past feature data including today's data if known
     # Todo: currently row goes from new to old
-    x = df['x_features'].shift(0).values
-    for i in range(1, BATCH_LEN):
-        x = np.dstack((x, df['x_features'].shift(i).values))
+    x = shift_data('x_features')
+
+    for corr in correlation_stock:
+        new_x = (shift_data(corr, pct=True))
+        x = np.concatenate([x, new_x], -1)
     x = x[0].tolist()
     df['training_features'] = x
+
+    # handles invalid numbers
+    # df.replace([np.inf, -np.inf], 0, inplace=True)
+    # df.fillna(0, inplace=True)
 
     return df
 
@@ -125,6 +141,7 @@ def get_training_dataset(ticker, df):
     df = extract_features_method_2(df, ticker)
 
     # take the last 7 days as validation samples before shuffle
+    # this is mainly for visualization
     sample_size = 15
     valid = df[-sample_size:]
     y = valid[ticker + LABEL_TO_PREDICT + '_labels'].values
@@ -174,7 +191,6 @@ def train(x, y):
     clf = VotingClassifier([('lsvc', svm.LinearSVC()),
                             ('knn', neighbors.KNeighborsClassifier()),
                             ('rfor', RandomForestClassifier())])
-
     clf.fit(x_train, y_train)
 
     # test data prediction
@@ -205,10 +221,10 @@ def forecast(ticker, df):
     matplot_graphs.plot_histogram(valid_set, ticker, confidence, PREDICTION_DAYS)
 
     # last dataset sample
-    x = x[-1:]
     clf = joblib.load(MODELS_PATH + ticker + '.pkl')
 
     # get forecast
+    x = x[-1:]
     forecast_ = clf.predict(x)
     print('\n', ticker, ': Based in the last', BATCH_LEN, 'market days, the forecast is ',
           forecast_ * PERCENTAGE_THRESHOLD, '% in next', PREDICTION_DAYS, 'days\n')
